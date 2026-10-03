@@ -1,13 +1,13 @@
 # Публикация: Gitea myapphub + сервер studio-myapphub-1
 
-Схема та же, что у остальных проектов myapphub (см. `D:\Claude\git\docs\CI-DEPLOY.md`): push в `main` → Gitea Actions → тесты → деплой по SSH на `deploy@188.166.91.146` в `/srv/car-import-bot` → `docker compose up -d --build` → проверка → при неудаче откат.
+Схема та же, что у остальных проектов myapphub (см. `D:\Claude\git\docs\CI-DEPLOY.md`): push в `main` → Gitea Actions → тесты → деплой по SSH на `deploy@188.166.91.146` в `/home/deploy/car-import-bot` → `docker compose up -d --build` → проверка → при неудаче откат.
 
 ## Что уже настроено
 
 - Репозиторий https://git.myapphub.tech/myapphub/car-import-bot (приватный), remote `gitea` на этой машине. Пуш идёт от пользователя codex-agent через Git Credential Manager.
 - Actions включены, workflow `.gitea/workflows/deploy.yml` и скрипт `.gitea/scripts/ci-ssh.sh` из шаблона myapphub, тесты в `ci/test.sh`.
-- Переменные репозитория (Settings → Actions → Variables): `DEPLOY_TARGETS`, `DEPLOY_PATH=/srv/car-import-bot`, `DEPLOY_EXCLUDES`, `DEPLOY_BUILD` (подключает override общей сети Caddy), `DEPLOY_ACTIVATE=docker compose up -d --build`, `DEPLOY_HEALTHCHECK`, `DEPLOY_HEALTH_RETRIES`.
-- Секрет `DEPLOY_ENV_FILE`: серверный `.env` с пустым `BOT_TOKEN`. Попадает в `/srv/car-import-bot/shared/.env`.
+- Переменные репозитория (Settings → Actions → Variables): `DEPLOY_TARGETS`, `DEPLOY_PATH=/home/deploy/car-import-bot`, `DEPLOY_EXCLUDES`, `DEPLOY_BUILD` (подключает override общей сети Caddy), `DEPLOY_ACTIVATE=docker compose up -d --build`, `DEPLOY_HEALTHCHECK`, `DEPLOY_HEALTH_RETRIES`.
+- Секрет `DEPLOY_ENV_FILE`: серверный `.env` с пустым `BOT_TOKEN`. Попадает в `/home/deploy/car-import-bot/shared/.env`.
 - Контейнеры: `bot` (Python, aiogram) и `web` (nginx со статикой калькулятора, в сети Caddy под именем `car-web`). Данные бота в томе `car-import-bot_bot-data`, релизы его не трогают.
 - Токен владельца `ci-car-import` создан в Gitea → Настройки → Приложения для `ci.py`. Если больше не нужен, удалите его там же.
 
@@ -57,7 +57,7 @@ Caddy сам выпустит сертификат. После этого Mini A
 ### 3. Проверка
 
 - Ход деплоя: https://git.myapphub.tech/myapphub/car-import-bot/actions
-- На сервере: `cd /srv/car-import-bot/current && docker compose ps && docker compose logs --tail 50 bot`
+- На сервере: `cd /home/deploy/car-import-bot/current && docker compose ps && docker compose logs --tail 50 bot`
 - В Telegram: `/start` боту, расчёт, заказ VIN приходит админу.
 
 ## Обновление
