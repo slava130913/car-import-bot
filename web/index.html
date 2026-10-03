@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Калькулятор авто из Китая</title>
+<meta name="description" content="Сколько реально стоит пригнать машину из Китая в 2026 году: пошлина, утильсбор, логистика, СБКТС, ЭПТС. Калькулятор с актуальными ставками и проверка по VIN.">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #15171a; --muted: #5c6670; --card: #f4f6f8; --line: #dde2e7;
+    --accent: #c8102e; --accent-fg: #ffffff; --warn-bg: #fff5e6; --warn-fg: #7a4b00; --ok: #1a7f37;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1114; --fg: #e8eaed; --muted: #9aa3ad; --card: #181b20; --line: #2a2f36;
+      --accent: #ff4d63; --accent-fg: #0f1114; --warn-bg: #2a2010; --warn-fg: #ffcf7a; --ok: #4cc26c;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1114; --fg: #e8eaed; --muted: #9aa3ad; --card: #181b20; --line: #2a2f36;
+    --accent: #ff4d63; --accent-fg: #0f1114; --warn-bg: #2a2010; --warn-fg: #ffcf7a; --ok: #4cc26c;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 28px; line-height: 1.2; margin: 0 0 8px; }
+  h2 { font-size: 20px; margin: 32px 0 12px; }
+  p.lead { color: var(--muted); margin: 0 0 24px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 560px) { .grid { grid-template-columns: 1fr; } }
+  label { display: block; font-size: 14px; color: var(--muted); margin-bottom: 4px; }
+  input, select { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--fg); font: inherit; }
+  button { margin-top: 16px; width: 100%; padding: 12px; border: 0; border-radius: 8px; background: var(--accent); color: var(--accent-fg); font: inherit; font-weight: 600; cursor: pointer; }
+  button.secondary { background: transparent; color: var(--fg); border: 1px solid var(--line); }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 15px; }
+  td { padding: 8px 4px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  td.num { text-align: right; white-space: nowrap; }
+  td.num .note { white-space: normal; }
+  td.note { color: var(--muted); font-size: 13px; }
+  tr.total td { font-weight: 700; border-bottom: 0; font-size: 17px; }
+  .warn { background: var(--warn-bg); color: var(--warn-fg); border-radius: 8px; padding: 10px 12px; margin-top: 10px; font-size: 14px; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .cta { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
+  .cta a { flex: 1 1 200px; text-align: center; text-decoration: none; padding: 12px; border-radius: 8px; background: var(--accent); color: var(--accent-fg); font-weight: 600; }
+  .cta a.secondary { background: transparent; color: var(--fg); border: 1px solid var(--line); }
+  .steps li { margin-bottom: 8px; }
+  footer { margin-top: 48px; font-size: 13px; color: var(--muted); }
+  footer a { color: inherit; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Сколько стоит пригнать машину из Китая</h1>
+  <p class="lead">Полный расчёт под ключ: цена, перевод денег, логистика, пошлина, утильсбор, СБКТС, ЭПТС и доставка до вашего города. Ставки актуальны на <span id="rulesVersion">…</span>.</p>
+
+  <div class="card">
+    <div class="grid">
+      <div><label for="price">Цена в Китае, ¥</label><input id="price" type="number" inputmode="numeric" placeholder="95000" value="95000"></div>
+      <div><label for="made">Год и месяц выпуска</label><input id="made" type="month" value="2025-01"></div>
+      <div><label for="cc">Объём двигателя, см³ (электро: 0)</label><input id="cc" type="number" inputmode="numeric" placeholder="1498" value="1498"></div>
+      <div><label for="hp">Мощность, л.с.</label><input id="hp" type="number" inputmode="numeric" placeholder="147" value="147"></div>
+      <div><label for="fuel">Тип двигателя</label>
+        <select id="fuel">
+          <option value="ice">Бензин / дизель</option>
+          <option value="hybrid_par">Параллельный гибрид (PHEV, DM-i)</option>
+          <option value="hybrid_seq">Последовательный гибрид (EREV)</option>
+          <option value="ev">Электромобиль</option>
+        </select></div>
+      <div><label for="route">Маршрут</label>
+        <select id="route">
+          <option value="suifenhe">Суйфэньхэ → Уссурийск</option>
+          <option value="zabaikalsk">Маньчжурия → Забайкальск</option>
+          <option value="khorgos">Хоргос → Казахстан</option>
+          <option value="sea">Морем до Владивостока</option>
+        </select></div>
+      <div><label for="dest">Куда везём</label>
+        <select id="dest">
+          <option value="moscow">Москва</option>
+          <option value="tula">Тула</option>
+          <option value="novosibirsk">Новосибирск</option>
+          <option value="khabarovsk">Хабаровск</option>
+          <option value="far_east">Оставить во Владивостоке</option>
+        </select></div>
+      <div><label>Курс</label><div id="ratesInfo" class="muted" style="padding-top:10px">загрузка…</div></div>
+    </div>
+    <button id="calcBtn">Рассчитать</button>
+  </div>
+
+  <div id="result" class="card" style="margin-top:16px; display:none"></div>
+
+  <div class="cta">
+    <a id="vinLink" href="#" target="_blank" rel="noopener">Проверить машину по VIN</a>
+    <a id="leadLink" class="secondary" href="#" target="_blank" rel="noopener">Оставить заявку на подбор</a>
+  </div>
+
+  <h2>Как это работает</h2>
+  <ol class="steps">
+    <li>Считаете стоимость под ключ здесь или в боте. Бесплатно.</li>
+    <li>Нашли машину в Китае: заказываете проверку по VIN. Присылаем историю (пробег, ДТП, сервис) на русском за 24 часа.</li>
+    <li>Хотите, чтобы машину подобрали и привезли: оставляете заявку, с вами связывается проверенный агент.</li>
+  </ol>
+
+  <h2>Главное про утильсбор в 2026</h2>
+  <div class="card" id="prefConditions"></div>
+
+  <footer>
+    <p id="disclaimer"></p>
+    <p>Источники ставок: <span id="sources"></span></p>
+  </footer>
+</div>
+
+<script src="calc.js"></script>
+<script>
+(function () {
+  const BOT_USERNAME = "YOUR_BOT_USERNAME"; // замените на username бота без @
+  const CBR_URL = "https://www.cbr-xml-daily.ru/daily_json.js";
+  const $ = (id) => document.getElementById(id);
+  let rules = null;
+  let rates = null;
+  let ratesSrc = "";
+
+  $("vinLink").href = `https://t.me/${BOT_USERNAME}?start=vin`;
+  $("leadLink").href = `https://t.me/${BOT_USERNAME}?start=lead`;
+
+  const tg = window.Telegram && window.Telegram.WebApp;
+  if (tg) { tg.ready(); tg.expand(); }
+
+  async function loadRules() {
+    const r = await fetch("rules.json", { cache: "no-cache" });
+    rules = await r.json();
+    $("rulesVersion").textContent = rules.version;
+    $("disclaimer").textContent = rules.disclaimer;
+    $("sources").innerHTML = rules.sources.map((u) => `<a href="${u}" target="_blank" rel="noopener">${new URL(u).hostname}</a>`).join(", ");
+    $("prefConditions").innerHTML = "<p>Льготная ставка (" + rules.util.preferential.new_rub + " ₽ за новую и " + rules.util.preferential.old_rub + " ₽ за машину старше 3 лет) действует только если:</p><ul>" +
+      rules.util.preferential.conditions.map((c) => `<li>${c}</li>`).join("") + "</ul><p class='muted'>Если мощность выше порога, утильсбор считается по коммерческой сетке и может превышать миллион рублей.</p>";
+  }
+
+  async function loadRates() {
+    try {
+      const r = await fetch(CBR_URL, { cache: "no-cache" });
+      const d = await r.json();
+      rates = { CNY: d.Valute.CNY.Value / d.Valute.CNY.Nominal, EUR: d.Valute.EUR.Value / d.Valute.EUR.Nominal };
+      ratesSrc = "ЦБ РФ на " + new Date(d.Date).toLocaleDateString("ru-RU");
+    } catch (e) {
+      rates = { CNY: rules.fallback_rates.CNY, EUR: rules.fallback_rates.EUR };
+      ratesSrc = "запасной курс от " + rules.fallback_rates.date;
+    }
+    $("ratesInfo").textContent = `¥ ${rates.CNY.toFixed(2)} ₽, € ${rates.EUR.toFixed(2)} ₽ (${ratesSrc})`;
+  }
+
+  function readCar() {
+    const made = $("made").value ? new Date($("made").value + "-01") : new Date();
+    return {
+      price_cny: Number($("price").value),
+      age: CarCalc.ageCategoryFromDate(made),
+      engine_cc: Number($("cc").value),
+      power_hp: Number($("hp").value),
+      fuel: $("fuel").value,
+      route: $("route").value,
+      destination: $("dest").value,
+      cny_rub: rates.CNY,
+      eur_rub: rates.EUR,
+    };
+  }
+
+  function render(res, car) {
+    const f = CarCalc.formatRub;
+    let html = `<div class="muted">Возраст: ${CarCalc.AGE_LABELS[car.age]}, ${car.engine_cc} см³, ${car.power_hp} л.с., ${CarCalc.FUEL_LABELS[car.fuel]}</div><table>`;
+    for (const ln of res.lines) {
+      let range = "";
+      if (ln.low !== null && ln.high !== null && ln.low !== ln.high) range = `<div class="note">вилка ${f(ln.low)} – ${f(ln.high)}</div>`;
+      const note = ln.note ? `<div class="note">${ln.note}</div>` : "";
+      html += `<tr><td>${ln.label}${note}</td><td class="num">${f(ln.mid)}${range}</td></tr>`;
+    }
+    html += `<tr class="total"><td>Итого ориентировочно</td><td class="num">${f(res.total_mid)}</td></tr>`;
+    if (res.total_low !== res.total_high) html += `<tr><td class="note">вилка</td><td class="num note">${f(res.total_low)} – ${f(res.total_high)}</td></tr>`;
+    html += "</table>";
+    for (const w of res.warnings) html += `<div class="warn">${w}</div>`;
+    html += `<p class="muted" style="margin-top:12px">Курс: ${ratesSrc}. Правила от ${res.rules_version}. ${rules.disclaimer}</p>`;
+    const box = $("result");
+    box.innerHTML = html;
+    box.style.display = "block";
+    box.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  $("calcBtn").addEventListener("click", () => {
+    if (!rules || !rates) return;
+    const car = readCar();
+    if (!(car.price_cny > 0) || !(car.power_hp > 0) || car.engine_cc < 0) {
+      alert("Проверьте цену, объём и мощность.");
+      return;
+    }
+    render(CarCalc.calculate(car, rules), car);
+  });
+
+  loadRules().then(loadRates).catch((e) => { $("ratesInfo").textContent = "Не удалось загрузить правила: " + e; });
+})();
+</script>
+</body>
+</html>

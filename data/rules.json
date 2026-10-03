@@ -1,0 +1,553 @@
+{
+  "version": "2026-10-03",
+  "currency_base": "RUB",
+  "disclaimer": "Расчёт ориентировочный и не является консультацией. Ставки собраны из открытых источников и требуют сверки с первоисточниками перед сделкой.",
+  "verification_note": "Сетка коммерческого утильсбора собрана из вторичных источников (renins.ru, calcal.ru, top-autoimport.ru, azway.ru); базовые коэффициенты до 160 л.с. (40,04/70,44 для 1–2 л и т.д.) подтверждены тремя источниками. Сетка по мощности для объёмов до 1 л, 3–3,5 л и свыше 3,5 л не подтверждена, ячейки null. Перед релизом сверить с Постановлением Правительства РФ № 1291 в редакции от 06.02.2026.",
+  "fallback_rates": {
+    "date": "2026-10-03",
+    "source": "ЦБ РФ, официальный курс на 03.10.2026",
+    "CNY": 12.4328,
+    "EUR": 94.3201,
+    "USD": 83.4839
+  },
+  "util": {
+    "base_rate_rub": 20000,
+    "preferential": {
+      "new_rub": 3400,
+      "old_rub": 5200,
+      "coef_new": 0.17,
+      "coef_old": 0.26,
+      "max_hp_ice": 160,
+      "max_hp_ev": 80,
+      "max_cc": 3000,
+      "conditions": [
+        "декларант — физическое лицо",
+        "автомобиль ввозится для личного пользования",
+        "мощность не более 160 л.с. (для электромобилей и последовательных гибридов — не более 80 л.с. по 30-минутной мощности)",
+        "объём двигателя не более 3000 см³",
+        "не более одного автомобиля в год на человека",
+        "без перепродажи в течение 12 месяцев после регистрации"
+      ],
+      "source": "https://content.renins.ru/osago/utilizatsionnyy-sbor-na-avtomobili-v-2026-godu/"
+    },
+    "commercial": {
+      "_format": "brackets: [max_hp_inclusive, rub_new_under_3y, rub_over_3y]; последний элемент с max_hp = 100000 означает 'и выше'",
+      "ice": {
+        "0-1000": {
+          "brackets": [
+            [
+              160,
+              297600,
+              552000
+            ],
+            [
+              100000,
+              null,
+              null
+            ]
+          ],
+          "note": "До 160 л.с.: коэффициенты 14,88 / 27,6. Ставки для мощности выше 160 л.с. не подтверждены",
+          "source": "https://calcal.ru/utilizacionnyj-sbor-2026-kalkulyator"
+        },
+        "1000-2000": {
+          "brackets": [
+            [
+              160,
+              800800,
+              1408800
+            ],
+            [
+              190,
+              900000,
+              1492800
+            ],
+            [
+              220,
+              952800,
+              1584000
+            ],
+            [
+              250,
+              1010400,
+              1677600
+            ],
+            [
+              280,
+              1142000,
+              1828000
+            ],
+            [
+              310,
+              1291200,
+              2011200
+            ],
+            [
+              340,
+              1459200,
+              2203200
+            ],
+            [
+              500,
+              null,
+              null
+            ],
+            [
+              100000,
+              3201600,
+              3796800
+            ]
+          ],
+          "source": "https://content.renins.ru/osago/utilizatsionnyy-sbor-na-avtomobili-v-2026-godu/ ; https://calcal.ru/utilizacionnyj-sbor-2026-kalkulyator (коэффициенты 40,04/70,44 … 160,08/189,84)"
+        },
+        "2000-3000": {
+          "brackets": [
+            [
+              160,
+              2250400,
+              3407200
+            ],
+            [
+              190,
+              2306800,
+              3456000
+            ],
+            [
+              220,
+              2364000,
+              3501600
+            ],
+            [
+              250,
+              2402400,
+              3552000
+            ],
+            [
+              280,
+              2520000,
+              3660000
+            ],
+            [
+              310,
+              2620800,
+              3744000
+            ],
+            [
+              340,
+              2726400,
+              3873200
+            ],
+            [
+              370,
+              2834400,
+              3981600
+            ],
+            [
+              400,
+              2945600,
+              4094000
+            ],
+            [
+              500,
+              null,
+              null
+            ],
+            [
+              100000,
+              3448800,
+              4572000
+            ]
+          ],
+          "source": "https://content.renins.ru/osago/utilizatsionnyy-sbor-na-avtomobili-v-2026-godu/"
+        },
+        "3000-3500": {
+          "brackets": [
+            [
+              160,
+              2584000,
+              3956200
+            ],
+            [
+              100000,
+              null,
+              null
+            ]
+          ],
+          "note": "До 160 л.с.: коэффициенты 129,2 / 197,81. Сетка по мощности выше 160 л.с. не подтверждена",
+          "source": "https://calcal.ru/utilizacionnyj-sbor-2026-kalkulyator ; https://top-autoimport.ru/blog/utilizacionnyy-sbor"
+        },
+        "3500+": {
+          "brackets": [
+            [
+              160,
+              3290600,
+              4325800
+            ],
+            [
+              100000,
+              null,
+              null
+            ]
+          ],
+          "note": "До 160 л.с.: коэффициенты 164,53 / 216,29. Сетка по мощности выше 160 л.с. не подтверждена",
+          "source": "https://calcal.ru/utilizacionnyj-sbor-2026-kalkulyator ; https://top-autoimport.ru/blog/utilizacionnyy-sbor"
+        }
+      },
+      "ev": {
+        "brackets": [
+          [
+            80,
+            800800,
+            1408800
+          ],
+          [
+            100,
+            991200,
+            1641600
+          ],
+          [
+            130,
+            1317600,
+            1912800
+          ],
+          [
+            160,
+            1560000,
+            2227200
+          ],
+          [
+            190,
+            1848000,
+            2594400
+          ],
+          [
+            220,
+            2193600,
+            3024000
+          ],
+          [
+            250,
+            2599200,
+            3523200
+          ],
+          [
+            280,
+            3079200,
+            4104000
+          ]
+        ],
+        "source": "https://content.renins.ru/osago/utilizatsionnyy-sbor-na-avtomobili-v-2026-godu/"
+      }
+    }
+  },
+  "customs_duty_individual": {
+    "_note": "Единые ставки для физлиц, Решение Совета ЕЭК от 20.12.2017 № 107, приложение 2. Применяются к ДВС и параллельным гибридам.",
+    "source": "https://www.tks.ru/auto/2000000008/",
+    "new_under_3y": {
+      "_format": "[max_price_eur_inclusive, percent, min_eur_per_cc]",
+      "brackets": [
+        [
+          8500,
+          54,
+          2.5
+        ],
+        [
+          16700,
+          48,
+          3.5
+        ],
+        [
+          42300,
+          48,
+          5.5
+        ],
+        [
+          84500,
+          48,
+          7.5
+        ],
+        [
+          169000,
+          48,
+          15
+        ],
+        [
+          1000000000,
+          48,
+          20
+        ]
+      ]
+    },
+    "age_3_to_5": {
+      "_format": "[max_cc_inclusive, eur_per_cc]",
+      "brackets": [
+        [
+          1000,
+          1.5
+        ],
+        [
+          1500,
+          1.7
+        ],
+        [
+          1800,
+          2.5
+        ],
+        [
+          2300,
+          2.7
+        ],
+        [
+          3000,
+          3.0
+        ],
+        [
+          100000,
+          3.6
+        ]
+      ]
+    },
+    "age_over_5": {
+      "_format": "[max_cc_inclusive, eur_per_cc]",
+      "brackets": [
+        [
+          1000,
+          3.0
+        ],
+        [
+          1500,
+          3.2
+        ],
+        [
+          1800,
+          3.5
+        ],
+        [
+          2300,
+          4.8
+        ],
+        [
+          3000,
+          5.0
+        ],
+        [
+          100000,
+          5.7
+        ]
+      ]
+    }
+  },
+  "ev_scheme": {
+    "_note": "Электромобили (8703 80) и последовательные гибриды для физлиц: пошлина 15% + акциз по мощности + НДС 22%.",
+    "source": "https://ucsol.ru/rastamozhka/avto/elektro",
+    "duty_pct": 15,
+    "vat_pct": 22,
+    "excise_rub_per_hp": {
+      "_format": "[max_hp_inclusive, rub_per_hp]",
+      "brackets": [
+        [
+          90,
+          0
+        ],
+        [
+          150,
+          64
+        ],
+        [
+          200,
+          613
+        ],
+        [
+          300,
+          1004
+        ],
+        [
+          400,
+          1711
+        ],
+        [
+          500,
+          1711
+        ],
+        [
+          100000,
+          1829
+        ]
+      ]
+    }
+  },
+  "customs_fee": {
+    "_note": "Таможенный сбор за оформление, по таможенной стоимости в рублях",
+    "_format": "[max_value_rub_inclusive, fee_rub]",
+    "source": "https://www.tks.ru/auto/2000000008/",
+    "brackets": [
+      [
+        200000,
+        775
+      ],
+      [
+        450000,
+        1550
+      ],
+      [
+        1200000,
+        3100
+      ],
+      [
+        2700000,
+        8530
+      ],
+      [
+        4200000,
+        12000
+      ],
+      [
+        5500000,
+        15500
+      ],
+      [
+        7000000,
+        20000
+      ],
+      [
+        8000000,
+        23000
+      ],
+      [
+        9000000,
+        25000
+      ],
+      [
+        10000000,
+        27000
+      ],
+      [
+        1000000000000,
+        30000
+      ]
+    ]
+  },
+  "costs": {
+    "_note": "Типовые расходы в рублях, диапазоны по рынку на осень 2026. mid используется в расчёте, low/high показываются как вилка.",
+    "china_side": {
+      "label": "Расходы в Китае (экспортная компания, инспекция, декларация, доставка до границы или порта)",
+      "low": 30000,
+      "mid": 50000,
+      "high": 80000,
+      "source": "https://dtf.ru/howto/4848213-peregon-avto-iz-kitaya-v-2026"
+    },
+    "payment_agent_pct": {
+      "label": "Комиссия платёжного агента за перевод в Китай",
+      "low": 1.0,
+      "mid": 3.0,
+      "high": 5.0,
+      "source": "https://dtf.ru/howto/4848213-peregon-avto-iz-kitaya-v-2026"
+    },
+    "logistics": {
+      "suifenhe": {
+        "label": "Автовоз Суйфэньхэ → Уссурийск",
+        "low": 70000,
+        "mid": 85000,
+        "high": 100000,
+        "days": "7–25",
+        "source": "https://jckauto.ru/blog/dostavka-avto-iz-kitaya"
+      },
+      "zabaikalsk": {
+        "label": "Автовоз Маньчжурия → Забайкальск",
+        "low": 70000,
+        "mid": 90000,
+        "high": 110000,
+        "days": "7–20",
+        "source": "https://jckauto.ru/blog/dostavka-avto-iz-kitaya"
+      },
+      "khorgos": {
+        "label": "Хоргос → Казахстан → Россия",
+        "low": 120000,
+        "mid": 170000,
+        "high": 220000,
+        "days": "10–25",
+        "source": "https://jckauto.ru/blog/dostavka-avto-iz-kitaya"
+      },
+      "sea": {
+        "label": "Морем до Владивостока (Далянь, Циндао, Шанхай)",
+        "low": 50000,
+        "mid": 80000,
+        "high": 100000,
+        "days": "5–15",
+        "source": "https://jckauto.ru/blog/dostavka-avto-iz-kitaya"
+      }
+    },
+    "domestic": {
+      "_note": "Доставка от Уссурийска/Владивостока до города получателя. Для маршрута через Хоргос в Москву доставка уже частично учтена, но для простоты MVP считаем одинаково.",
+      "far_east": {
+        "label": "Остаёмся во Владивостоке/Уссурийске",
+        "low": 0,
+        "mid": 0,
+        "high": 0
+      },
+      "khabarovsk": {
+        "label": "Хабаровск",
+        "low": 30000,
+        "mid": 40000,
+        "high": 50000
+      },
+      "novosibirsk": {
+        "label": "Новосибирск",
+        "low": 80000,
+        "mid": 100000,
+        "high": 120000
+      },
+      "moscow": {
+        "label": "Москва",
+        "low": 120000,
+        "mid": 150000,
+        "high": 180000
+      },
+      "tula": {
+        "label": "Тула",
+        "low": 135000,
+        "mid": 165000,
+        "high": 200000
+      },
+      "source": "https://jckauto.ru/blog/dostavka-avto-iz-kitaya"
+    },
+    "broker": {
+      "label": "Таможенный брокер",
+      "low": 15000,
+      "mid": 25000,
+      "high": 35000
+    },
+    "svh": {
+      "label": "СВХ и прочие сборы на таможне",
+      "low": 5000,
+      "mid": 10000,
+      "high": 20000
+    },
+    "sbkts_glonass": {
+      "label": "СБКТС и установка ЭРА-ГЛОНАСС",
+      "low": 20000,
+      "mid": 35000,
+      "high": 50000,
+      "source": "https://dtf.ru/howto/4848213-peregon-avto-iz-kitaya-v-2026"
+    },
+    "epts_registration": {
+      "label": "ЭПТС, госпошлины, регистрация",
+      "low": 15000,
+      "mid": 20000,
+      "high": 30000,
+      "source": "https://dtf.ru/howto/4848213-peregon-avto-iz-kitaya-v-2026"
+    }
+  },
+  "sources": [
+    "https://content.renins.ru/osago/utilizatsionnyy-sbor-na-avtomobili-v-2026-godu/",
+    "https://chest-import.com/stati/utilsbor-na-avto-2026",
+    "https://azway.ru/blog/util-sbor-2026",
+    "https://www.avtovzglyad.ru/avto/price/72942-2026-06-25-utilsbor-2026-stavki-tablitsa-raschyot-lgotyi-ikto-mozhet-neplatit/",
+    "https://www.tks.ru/auto/2000000008/",
+    "https://ucsol.ru/rastamozhka/avto/elektro",
+    "https://jckauto.ru/blog/dostavka-avto-iz-kitaya",
+    "https://dtf.ru/howto/4848213-peregon-avto-iz-kitaya-v-2026",
+    "https://www.kontur-extern.ru/info/normativ/document/1/504562-postanovlenie-pravitelstva-rf-ot-26-12-2013-n-1291",
+    "https://calcal.ru/utilizacionnyj-sbor-2026-kalkulyator",
+    "https://top-autoimport.ru/blog/utilizacionnyy-sbor"
+  ]
+}
