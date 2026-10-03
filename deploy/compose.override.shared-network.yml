@@ -3,7 +3,6 @@
 # В Caddyfile общего Caddy:  car.myapphub.tech { reverse_proxy car-web:80 }
 services:
   web:
-    ports: !reset []
     networks:
       default:
       edge:

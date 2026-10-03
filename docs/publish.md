@@ -1,78 +1,73 @@
-# Публикация: Gitea (git.myapphub.tech), сайт и бот на своём сервере
+# Публикация: Gitea myapphub + сервер studio-myapphub-1
 
-Схема: код живёт в Gitea, на сервере приложений лежит клон репозитория, nginx раздаёт `web/` как сайт, бот крутится как systemd-сервис. Обновление одной командой или автоматически через Gitea Actions.
+Схема та же, что у остальных проектов myapphub (см. `D:\Claude\git\docs\CI-DEPLOY.md`): push в `main` → Gitea Actions → тесты → деплой по SSH на `deploy@188.166.91.146` в `/srv/car-import-bot` → `docker compose up -d --build` → проверка → при неудаче откат.
 
-## 1. Репозиторий в Gitea
+## Что уже настроено
 
-1. Войти в https://git.myapphub.tech → «+» → «Новый репозиторий». Имя `car-import-bot`, приватный или публичный на ваш выбор, без инициализации README.
-2. На этой машине добавить remote и запушить:
+- Репозиторий https://git.myapphub.tech/myapphub/car-import-bot (приватный), remote `gitea` на этой машине. Пуш идёт от пользователя codex-agent через Git Credential Manager.
+- Actions включены, workflow `.gitea/workflows/deploy.yml` и скрипт `.gitea/scripts/ci-ssh.sh` из шаблона myapphub, тесты в `ci/test.sh`.
+- Переменные репозитория (Settings → Actions → Variables): `DEPLOY_TARGETS`, `DEPLOY_PATH=/srv/car-import-bot`, `DEPLOY_EXCLUDES`, `DEPLOY_BUILD` (подключает override общей сети Caddy), `DEPLOY_ACTIVATE=docker compose up -d --build`, `DEPLOY_HEALTHCHECK`, `DEPLOY_HEALTH_RETRIES`.
+- Секрет `DEPLOY_ENV_FILE`: серверный `.env` с пустым `BOT_TOKEN`. Попадает в `/srv/car-import-bot/shared/.env`.
+- Контейнеры: `bot` (Python, aiogram) и `web` (nginx со статикой калькулятора, в сети Caddy под именем `car-web`). Данные бота в томе `car-import-bot_bot-data`, релизы его не трогают.
+- Токен владельца `ci-car-import` создан в Gitea → Настройки → Приложения для `ci.py`. Если больше не нужен, удалите его там же.
 
-```bash
-git remote add gitea https://git.myapphub.tech/<ваш_логин>/car-import-bot.git
-git push -u gitea main
+## Что осталось сделать руками
+
+### 1. Токен бота (без него бот ждёт и ничего не делает)
+
+1. @BotFather → `/newbot` → токен. @userinfobot → ваш id.
+2. Обновить серверный `.env` одной командой (файл не попадает в git):
+
+```powershell
+$env:GITEA_TOKEN = '<токен ci-car-import или новый>'
+python D:\Claude\git\scripts\ci.py set-secret DEPLOY_ENV_FILE --repo myapphub/car-import-bot --file D:\secure\car-import-bot.env
 ```
 
-При первом пуше Git спросит логин и пароль. Вместо пароля вставьте токен: в Gitea → Настройки → Приложения → «Создать токен» с правами `repository: read and write`. Git Credential Manager запомнит его.
+Содержимое файла:
 
-Если хотите, чтобы GitHub-копия тоже обновлялась: `git push origin main` (origin уже указывает на github.com/slava130913/car-import-bot). Можно удалить её: `git remote remove origin`.
-
-## 2. Сервер для бота и сайта
-
-Подойдёт любой VPS с Ubuntu 22.04+. Выполнить от root:
-
-```bash
-apt-get update && apt-get install -y git nginx python3 python3-venv certbot python3-certbot-nginx
-git clone https://git.myapphub.tech/<ваш_логин>/car-import-bot.git /opt/car-import-bot
-cd /opt/car-import-bot
-cp .env.example .env
-nano .env        # BOT_TOKEN, ADMIN_IDS, BOT_USERNAME, при желании VIN_PRICE_STARS и ANTHROPIC_API_KEY
-sudo bash deploy/install.sh
+```
+BOT_TOKEN=123456:AA...
+ADMIN_IDS=ваш_id
+BOT_USERNAME=username_бота_без_@
+VIN_PRICE_STARS=0
+PAYMENT_INSTRUCTIONS=Мы свяжемся с вами для оплаты и пришлём отчёт в течение 24 часов.
+ANTHROPIC_API_KEY=
+EDGE_NETWORK=bytoprompt-studio_default
 ```
 
-Скрипт создаст виртуальное окружение, соберёт `web/`, поставит и запустит сервис `car-import-bot`. Проверка: `journalctl -u car-import-bot -f`, в Telegram написать боту `/start`.
+3. Перезапустить деплой: Actions → deploy → Run workflow (или любой push в main). Бот подхватит токен.
 
-Для приватного репозитория клонируйте по SSH: на сервере `ssh-keygen -t ed25519`, публичный ключ добавить в Gitea → Настройки → SSH/GPG ключи, затем `git clone git@git.myapphub.tech:<логин>/car-import-bot.git`.
+### 2. Домен сайта
 
-## 3. Сайт калькулятора
+Сейчас сайт работает на GitHub Pages: https://slava130913.github.io/car-import-bot/. Чтобы отдавать его со своего сервера:
 
-```bash
-cp /opt/car-import-bot/deploy/nginx-web.conf /etc/nginx/sites-available/car-calc
-nano /etc/nginx/sites-available/car-calc      # server_name → ваш домен, например calc.myapphub.tech
-ln -s /etc/nginx/sites-available/car-calc /etc/nginx/sites-enabled/
-nginx -t && systemctl reload nginx
-certbot --nginx -d calc.myapphub.tech          # HTTPS, обязателен для Telegram Mini App
+1. reg.ru → DNS `myapphub.tech` → A-запись `car` → `188.166.91.146`.
+2. В Caddyfile Студии (`/opt/bytoprompt-studio/deploy/Caddyfile`, эталон `D:\Codex\mygit\deploy\Caddyfile.git`) добавить блок:
+
+```
+car.myapphub.tech {
+    reverse_proxy car-web:80
+}
 ```
 
-DNS: A-запись домена на IP сервера. После этого сайт открывается по https://calc.myapphub.tech, кнопки ведут на бота из `BOT_USERNAME`.
+3. На сервере: `docker exec bytoprompt-studio-caddy-1 caddy reload --config /etc/caddy/Caddyfile`.
 
-Mini App: @BotFather → `/mybots` → бот → Bot Settings → Menu Button → URL сайта.
+Caddy сам выпустит сертификат. После этого Mini App: @BotFather → Bot Settings → Menu Button → https://car.myapphub.tech/.
 
-## 4. Обновление после изменений
+### 3. Проверка
 
-На своей машине: закоммитить и `git push gitea main`. На сервере:
+- Ход деплоя: https://git.myapphub.tech/myapphub/car-import-bot/actions
+- На сервере: `cd /srv/car-import-bot/current && docker compose ps && docker compose logs --tail 50 bot`
+- В Telegram: `/start` боту, расчёт, заказ VIN приходит админу.
+
+## Обновление
 
 ```bash
-bash /opt/car-import-bot/deploy/deploy.sh
+git add -A && git commit -m "Что изменилось" && git push gitea main
 ```
 
-Скрипт делает `git pull`, обновляет зависимости, пересобирает `web/` и перезапускает бота. Сайт обновляется сразу, потому что nginx читает файлы из той же папки.
+Копия на GitHub обновляется отдельно: `git push origin main`. Если GitHub больше не нужен, `git remote remove origin` и удалите репозиторий там.
 
-## 5. Автодеплой через Gitea Actions (необязательно)
+## Запуск на своём компьютере
 
-Файл `.gitea/workflows/ci.yml` уже в репозитории: на каждый пуш гоняет тесты, при пуше в main деплоит по SSH.
-
-1. В Gitea включить Actions (в `app.ini`: `[actions] ENABLED = true`) и подключить runner по инструкции Gitea (act_runner), либо убедиться, что он уже есть у вас в Site Administration → Actions → Runners.
-2. На сервере приложений создать ключ для деплоя: `ssh-keygen -t ed25519 -f ~/.ssh/deploy_car -N ""`, публичный добавить в `~/.ssh/authorized_keys` пользователя, который имеет право запускать `systemctl restart car-import-bot` (root или sudo без пароля для этой команды).
-3. В репозитории Gitea → Settings → Actions → Secrets добавить `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_KEY` (содержимое приватного ключа).
-
-Без секретов workflow просто гоняет тесты.
-
-## 6. Если бот и Gitea на одном сервере
-
-Это нормально: бот не слушает портов, nginx добавляет ещё один `server`-блок рядом с блоком Gitea. Следите только, чтобы `server_name` отличались.
-
-## 7. Что проверить после публикации
-
-- `/start` в боте отвечает, расчёт проходит, заказ VIN приходит админу.
-- Сайт открывается по HTTPS, расчёт работает, кнопки ведут на бота.
-- `systemctl status car-import-bot` показывает `active (running)` после перезагрузки сервера.
+Без Docker: `powershell -ExecutionPolicy Bypass -File run.ps1`. С Docker: `docker compose up -d --build`, сайт на http://localhost:8080.

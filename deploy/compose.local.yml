@@ -1,0 +1,6 @@
+# Локальный запуск: открывает сайт на http://localhost:8080
+# cp deploy/compose.local.yml compose.override.yml
+services:
+  web:
+    ports:
+      - "${WEB_PORT:-8080}:80"

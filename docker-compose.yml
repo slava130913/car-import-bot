@@ -1,4 +1,4 @@
-# Бот и сайт. Локально: docker compose up -d --build
+# Бот и сайт. Локально: cp deploy/compose.local.yml compose.override.yml && docker compose up -d --build
 # На сервере поверх этого файла кладётся deploy/compose.override.shared-network.yml (подключение к общему Caddy).
 name: car-import-bot
 
@@ -19,8 +19,6 @@ services:
       dockerfile: deploy/Dockerfile.web
     env_file: .env
     restart: unless-stopped
-    ports:
-      - "${WEB_PORT:-8080}:80"
     mem_limit: 64m
     cpus: 0.25
 
