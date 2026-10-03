@@ -1,5 +1,8 @@
 # Авто из Китая под ключ: MVP
 
+Репозиторий: https://github.com/slava130913/car-import-bot  
+Сайт (GitHub Pages): https://slava130913.github.io/car-import-bot/
+
 Telegram-бот и веб-калькулятор для тех, кто пригоняет машины из Китая.
 
 Что внутри:
