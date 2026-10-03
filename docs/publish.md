@@ -7,35 +7,22 @@
 - Репозиторий https://git.myapphub.tech/myapphub/car-import-bot (приватный), remote `gitea` на этой машине. Пуш идёт от пользователя codex-agent через Git Credential Manager.
 - Actions включены, workflow `.gitea/workflows/deploy.yml` и скрипт `.gitea/scripts/ci-ssh.sh` из шаблона myapphub, тесты в `ci/test.sh`.
 - Переменные репозитория (Settings → Actions → Variables): `DEPLOY_TARGETS`, `DEPLOY_PATH=/home/deploy/car-import-bot`, `DEPLOY_EXCLUDES`, `DEPLOY_BUILD` (подключает override общей сети Caddy), `DEPLOY_ACTIVATE=docker compose up -d --build`, `DEPLOY_HEALTHCHECK`, `DEPLOY_HEALTH_RETRIES`.
-- Секрет `DEPLOY_ENV_FILE`: серверный `.env` с пустым `BOT_TOKEN`. Попадает в `/home/deploy/car-import-bot/shared/.env`.
+- Секрет `DEPLOY_ENV_FILE`: серверный `.env` с токеном бота, ADMIN_IDS и BOT_USERNAME. Попадает в `/home/deploy/car-import-bot/shared/.env`.
 - Контейнеры: `bot` (Python, aiogram) и `web` (nginx со статикой калькулятора, в сети Caddy под именем `car-web`). Данные бота в томе `car-import-bot_bot-data`, релизы его не трогают.
 - Токен владельца `ci-car-import` создан в Gitea → Настройки → Приложения для `ci.py`. Если больше не нужен, удалите его там же.
 
 ## Что осталось сделать руками
 
-### 1. Токен бота (без него бот ждёт и ничего не делает)
+### 1. Бот (сделано)
 
-1. @BotFather → `/newbot` → токен. @userinfobot → ваш id.
-2. Обновить серверный `.env` одной командой (файл не попадает в git):
+Бот @china_car_calc_bot создан, токен и ADMIN_IDS лежат в секрете `DEPLOY_ENV_FILE` и в локальном `.env`. Команды, описание и кнопка меню (Mini App на GitHub Pages) заданы в BotFather. Чтобы поменять настройки на сервере:
 
 ```powershell
 $env:GITEA_TOKEN = '<токен ci-car-import или новый>'
-python D:\Claude\git\scripts\ci.py set-secret DEPLOY_ENV_FILE --repo myapphub/car-import-bot --file D:\secure\car-import-bot.env
+python D:\Claude\git\scripts\ci.py set-secret DEPLOY_ENV_FILE --repo myapphub/car-import-bot --file D:\Claude\car\.env
 ```
 
-Содержимое файла:
-
-```
-BOT_TOKEN=123456:AA...
-ADMIN_IDS=ваш_id
-BOT_USERNAME=username_бота_без_@
-VIN_PRICE_STARS=0
-PAYMENT_INSTRUCTIONS=Мы свяжемся с вами для оплаты и пришлём отчёт в течение 24 часов.
-ANTHROPIC_API_KEY=
-EDGE_NETWORK=bytoprompt-studio_default
-```
-
-3. Перезапустить деплой: Actions → deploy → Run workflow (или любой push в main). Бот подхватит токен.
+затем Actions → deploy → Run workflow.
 
 ### 2. Домен сайта
 

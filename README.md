@@ -1,5 +1,6 @@
 # Авто из Китая под ключ: MVP
 
+Бот: https://t.me/china_car_calc_bot  
 Репозиторий: Gitea git.myapphub.tech (основной), копия на https://github.com/slava130913/car-import-bot  
 Сайт: GitHub Pages https://slava130913.github.io/car-import-bot/ (временный), на своём сервере по [docs/publish.md](docs/publish.md)
 
