@@ -41,6 +41,8 @@ python -m bot.main
 
 ## Веб-калькулятор
 
+Опубликованная копия (приватная, HTTPS, подходит как URL для Mini App после открытия доступа): https://claude.ai/artifact/XxxCXRABsy83WNQeNMMbcT
+
 ```bash
 python scripts/export_rules.py
 cd web
