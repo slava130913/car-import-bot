@@ -232,3 +232,57 @@ def test_done_notifies_user(env):
     assert "закрыт" in texts(admin)
     assert bm.db.get_order(oid)["status"] == "done"
     assert any(chat == 55 for chat, _ in fbot.sent)
+
+
+def test_calc_flow_ev_and_recalc_button(env):
+    state, fbot = env
+
+    async def flow():
+        m = Msg(text=bm.BTN_CALC)
+        await bm.calc_start(m, state)
+        await bm.calc_price(Msg(text="150000", outbox=m.outbox), state)
+        await bm.calc_made(Msg(text="2025-06", outbox=m.outbox), state)
+        await bm.calc_cc(Msg(text="0", outbox=m.outbox), state)
+        await bm.calc_hp(Msg(text="204", outbox=m.outbox), state)
+        await bm.calc_fuel(Cb("fuel:ev", m), state)
+        await bm.calc_route(Cb("route:suifenhe", m), state)
+        await bm.calc_dest(Cb("dest:moscow", m), state, fbot)
+        out = texts(m)
+        assert "Пошлина 15%" in out and "НДС 22%" in out and "Акциз" in out
+        assert "выше порога 80" in out
+        # кнопка «Пересчитать» снова просит цену
+        await bm.calc_restart(Cb("go:calc", m), state)
+        assert await state.get_state() == bm.Calc.price.state
+        return m
+
+    run(flow())
+
+
+def test_calc_rejects_bad_year_and_huge_cc(env):
+    state, fbot = env
+
+    async def flow():
+        m = Msg(text=bm.BTN_CALC)
+        await bm.calc_start(m, state)
+        await bm.calc_price(Msg(text="100000", outbox=m.outbox), state)
+        await bm.calc_made(Msg(text="2099", outbox=m.outbox), state)
+        assert "Проверьте год" in m.outbox[-1]["text"]
+        await bm.calc_made(Msg(text="2022-02", outbox=m.outbox), state)
+        assert "от 3 до 5 лет" in m.outbox[-1]["text"]
+        await bm.calc_cc(Msg(text="99999", outbox=m.outbox), state)
+        assert "Проверьте объём" in m.outbox[-1]["text"]
+        return m
+
+    run(flow())
+
+
+def test_start_deep_link_lead(env):
+    state, fbot = env
+
+    async def flow():
+        m = Msg(text="/start lead")
+        await bm.cmd_start(m, state, CommandObject(prefix="/", command="start", args="lead"))
+        return m, await state.get_state()
+
+    m, s = run(flow())
+    assert s == bm.Lead.model.state and "Какую машину" in texts(m)
