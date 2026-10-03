@@ -542,7 +542,9 @@ async def fallback(m: Message) -> None:
 async def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     if not BOT_TOKEN:
-        raise SystemExit("BOT_TOKEN не задан. Скопируйте .env.example в .env и заполните.")
+        while True:
+            log.error("BOT_TOKEN не задан. Впишите токен от @BotFather в .env (на сервере: секрет DEPLOY_ENV_FILE) и перезапустите.")
+            await asyncio.sleep(3600)
     bot = Bot(BOT_TOKEN)
     dp = Dispatcher()
     dp.include_router(router)

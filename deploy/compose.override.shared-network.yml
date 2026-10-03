@@ -1,0 +1,15 @@
+# Сервер с общим Caddy (studio-myapphub-1): сайт подключается к сети Caddy под именем car-web, портов на хосте не открывает.
+# Ставится деплоем: DEPLOY_BUILD = cp deploy/compose.override.shared-network.yml compose.override.yml
+# В Caddyfile общего Caddy:  car.myapphub.tech { reverse_proxy car-web:80 }
+services:
+  web:
+    ports: !reset []
+    networks:
+      default:
+      edge:
+        aliases: [car-web]
+
+networks:
+  edge:
+    name: ${EDGE_NETWORK:-bytoprompt-studio_default}
+    external: true

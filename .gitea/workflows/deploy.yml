@@ -1,0 +1,61 @@
+# Test and deploy over SSH on every push to main, or by hand (Actions -> deploy -> Run workflow).
+# Servers and commands live in Gitea (repo/org Settings -> Actions -> Variables and Secrets),
+# never in the repository. Reference: docs/CI-DEPLOY.md in the myapphub-git project.
+# No third-party actions: the pipeline keeps working when GitHub is slow or unreachable.
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  GIT_TOKEN: ${{ gitea.token }}
+  GIT_SERVER: ${{ gitea.server_url }}
+  GIT_REPO: ${{ gitea.repository }}
+  GIT_SHA: ${{ gitea.sha }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        run: |
+          git init -q .
+          auth=$(printf 'x-access-token:%s' "$GIT_TOKEN" | base64 -w0)
+          git -c http.extraHeader="Authorization: Basic $auth" fetch -q --depth 1 "$GIT_SERVER/$GIT_REPO.git" "$GIT_SHA"
+          git checkout -q FETCH_HEAD
+      - name: Test
+        run: |
+          if [ -f ci/test.sh ]; then bash ci/test.sh; else echo 'No ci/test.sh, skipping tests'; fi
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        run: |
+          git init -q .
+          auth=$(printf 'x-access-token:%s' "$GIT_TOKEN" | base64 -w0)
+          git -c http.extraHeader="Authorization: Basic $auth" fetch -q --depth 1 "$GIT_SERVER/$GIT_REPO.git" "$GIT_SHA"
+          git checkout -q FETCH_HEAD
+      - name: Build
+        run: |
+          if [ -f ci/build.sh ]; then bash ci/build.sh; else echo 'No ci/build.sh, uploading sources as is'; fi
+      - name: Deploy
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_DEPLOY_KEY }}
+          SSH_KNOWN_HOSTS: ${{ vars.SSH_KNOWN_HOSTS }}
+          DEPLOY_TARGETS: ${{ vars.DEPLOY_TARGETS }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+          DEPLOY_SOURCE: ${{ vars.DEPLOY_SOURCE }}
+          DEPLOY_EXCLUDES: ${{ vars.DEPLOY_EXCLUDES }}
+          DEPLOY_BUILD: ${{ vars.DEPLOY_BUILD }}
+          DEPLOY_ACTIVATE: ${{ vars.DEPLOY_ACTIVATE }}
+          DEPLOY_HEALTHCHECK: ${{ vars.DEPLOY_HEALTHCHECK }}
+          DEPLOY_HEALTH_RETRIES: ${{ vars.DEPLOY_HEALTH_RETRIES }}
+          DEPLOY_HEALTH_DELAY: ${{ vars.DEPLOY_HEALTH_DELAY }}
+          DEPLOY_KEEP: ${{ vars.DEPLOY_KEEP }}
+          DEPLOY_PUBLIC_URL: ${{ vars.DEPLOY_PUBLIC_URL }}
+          DEPLOY_ENV_FILE: ${{ secrets.DEPLOY_ENV_FILE }}
+        run: bash .gitea/scripts/ci-ssh.sh deploy
