@@ -1,7 +1,7 @@
 # Авто из Китая под ключ: MVP
 
-Репозиторий: https://github.com/slava130913/car-import-bot  
-Сайт (GitHub Pages): https://slava130913.github.io/car-import-bot/
+Репозиторий: Gitea git.myapphub.tech (основной), копия на https://github.com/slava130913/car-import-bot  
+Сайт: GitHub Pages https://slava130913.github.io/car-import-bot/ (временный), на своём сервере по [docs/publish.md](docs/publish.md)
 
 Telegram-бот и веб-калькулятор для тех, кто пригоняет машины из Китая.
 
@@ -96,6 +96,8 @@ python -m pytest -q
 - Запасной курс в `fallback_rates` на 03.10.2026. Бот тянет курс ЦБ онлайн, запасной нужен только если сеть недоступна.
 
 ## Деплой
+
+Полная инструкция для своего сервера и Gitea: [docs/publish.md](docs/publish.md). Коротко: `deploy/install.sh` ставит бота как сервис, `deploy/nginx-web.conf` раздаёт сайт, `deploy/deploy.sh` обновляет всё одной командой.
 
 Любой VPS с Python 3.11+. Пример systemd-юнита:
 

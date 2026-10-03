@@ -1,0 +1,45 @@
+# Gitea Actions: тесты на каждый пуш и автодеплой на сервер по SSH при пуше в main.
+# Работает, если в Gitea включены Actions и зарегистрирован runner (Site Administration → Actions → Runners).
+# Секреты репозитория (Settings → Actions → Secrets):
+#   DEPLOY_HOST  — адрес сервера, где крутится бот и сайт
+#   DEPLOY_USER  — пользователь SSH
+#   DEPLOY_KEY   — приватный ключ SSH (содержимое файла)
+# Если секреты не заданы, шаг деплоя пропускается, тесты всё равно выполняются.
+name: CI and deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: pip install -r requirements.txt
+      - run: python -m pytest -q
+
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        if: ${{ secrets.DEPLOY_HOST != '' }}
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh -i ~/.ssh/id_deploy "$DEPLOY_USER@$DEPLOY_HOST" "bash /opt/car-import-bot/deploy/deploy.sh"
