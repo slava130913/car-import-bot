@@ -252,7 +252,7 @@ def test_calc_flow_ev_and_recalc_button(env):
         assert "выше порога 80" in out
         # кнопка «Пересчитать» снова просит цену
         await bm.calc_restart(Cb("go:calc", m), state)
-        assert await state.get_state() == bm.Calc.price.state
+        assert await state.get_state() == bm.Calc.mode.state
         return m
 
     run(flow())
@@ -270,7 +270,7 @@ def test_calc_rejects_bad_year_and_huge_cc(env):
         await bm.calc_made(Msg(text="2022-02", outbox=m.outbox), state)
         assert "от 3 до 5 лет" in m.outbox[-1]["text"]
         await bm.calc_cc(Msg(text="99999", outbox=m.outbox), state)
-        assert "Проверьте объём" in m.outbox[-1]["text"]
+        assert "Нужно число" in m.outbox[-1]["text"]
         return m
 
     run(flow())

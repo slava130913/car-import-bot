@@ -1,5 +1,6 @@
 FROM nginx:1.27-alpine
 COPY web/ /usr/share/nginx/html/
 COPY data/rules.json /usr/share/nginx/html/rules.json
+COPY data/models.json /usr/share/nginx/html/models.json
 COPY deploy/web-entrypoint.sh /docker-entrypoint.d/40-config.sh
 RUN chmod +x /docker-entrypoint.d/40-config.sh

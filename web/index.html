@@ -56,6 +56,9 @@
   <p class="lead">Полный расчёт под ключ: цена, перевод денег, логистика, пошлина, утильсбор, СБКТС, ЭПТС и доставка до вашего города. Ставки актуальны на <span id="rulesVersion">…</span>.</p>
 
   <div class="card">
+    <div style="margin-bottom:12px"><label for="model">Популярная модель (заполнит объём, мощность и тип)</label>
+      <select id="model"><option value="">Выбрать модель или ввести вручную ниже</option></select>
+      <div id="modelNote" class="muted" style="margin-top:4px"></div></div>
     <div class="grid">
       <div><label for="price">Цена в Китае, ¥</label><input id="price" type="number" inputmode="numeric" placeholder="95000" value="95000"></div>
       <div><label for="made">Год и месяц выпуска</label><input id="made" type="month" value="2025-01"></div>
@@ -128,6 +131,25 @@
   const tg = window.Telegram && window.Telegram.WebApp;
   if (tg) { tg.ready(); tg.expand(); }
 
+  async function loadModels() {
+    try {
+      const r = await fetch("models.json", { cache: "no-cache" });
+      const data = await r.json();
+      const sel = $("model");
+      for (const m of data.models) {
+        const o = document.createElement("option");
+        o.value = m.id; o.textContent = m.name; o.dataset.cc = m.cc; o.dataset.hp = m.hp; o.dataset.fuel = m.fuel; o.dataset.note = m.note || "";
+        sel.appendChild(o);
+      }
+      sel.addEventListener("change", () => {
+        const o = sel.selectedOptions[0];
+        if (!o || !o.value) { $("modelNote").textContent = ""; return; }
+        $("cc").value = o.dataset.cc; $("hp").value = o.dataset.hp; $("fuel").value = o.dataset.fuel;
+        $("modelNote").textContent = (o.dataset.note ? o.dataset.note + ". " : "") + data.note;
+      });
+    } catch (e) { /* список моделей необязателен */ }
+  }
+
   async function loadRules() {
     const r = await fetch("rules.json", { cache: "no-cache" });
     rules = await r.json();
@@ -197,6 +219,7 @@
   });
 
   loadRules().then(loadRates).catch((e) => { $("ratesInfo").textContent = "Не удалось загрузить правила: " + e; });
+  loadModels();
 })();
 </script>
 </body>

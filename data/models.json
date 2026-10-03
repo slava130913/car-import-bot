@@ -1,0 +1,30 @@
+{
+  "version": "2026-10-03",
+  "note": "Характеристики типовые для китайского рынка. Мощность для утильсбора сверяйте с документами: для электромобилей и последовательных гибридов считается 30-минутная мощность, здесь указана пиковая.",
+  "models": [
+    {"id": "coolray", "name": "Geely Coolray 1.5T", "cc": 1498, "hp": 147, "fuel": "ice"},
+    {"id": "emgrand", "name": "Geely Emgrand 1.5", "cc": 1499, "hp": 122, "fuel": "ice"},
+    {"id": "monjaro", "name": "Geely Monjaro 2.0T", "cc": 1998, "hp": 238, "fuel": "ice"},
+    {"id": "boyue_l", "name": "Geely Boyue L / Atlas 2.0T", "cc": 1998, "hp": 218, "fuel": "ice"},
+    {"id": "tiggo4", "name": "Chery Tiggo 4 Pro 1.5T", "cc": 1498, "hp": 147, "fuel": "ice"},
+    {"id": "omoda_c5", "name": "Omoda C5 1.5T", "cc": 1498, "hp": 147, "fuel": "ice"},
+    {"id": "tiggo7", "name": "Chery Tiggo 7 Pro 1.6T", "cc": 1598, "hp": 197, "fuel": "ice"},
+    {"id": "tiggo8", "name": "Chery Tiggo 8 Pro Max 2.0T", "cc": 1998, "hp": 254, "fuel": "ice"},
+    {"id": "jolion", "name": "Haval Jolion 1.5T", "cc": 1497, "hp": 150, "fuel": "ice"},
+    {"id": "h6", "name": "Haval H6 2.0T", "cc": 1998, "hp": 224, "fuel": "ice"},
+    {"id": "dargo", "name": "Haval Dargo 2.0T", "cc": 1998, "hp": 211, "fuel": "ice"},
+    {"id": "tank300", "name": "Tank 300 2.0T", "cc": 1998, "hp": 227, "fuel": "ice"},
+    {"id": "cs75", "name": "Changan CS75 Plus 2.0T", "cc": 1998, "hp": 233, "fuel": "ice"},
+    {"id": "unik", "name": "Changan UNI-K 2.0T", "cc": 1998, "hp": 233, "fuel": "ice"},
+    {"id": "camry", "name": "Toyota Camry 2.0 (Китай)", "cc": 1987, "hp": 171, "fuel": "ice"},
+    {"id": "highlander", "name": "Toyota Highlander 2.0T (Китай)", "cc": 1998, "hp": 220, "fuel": "ice"},
+    {"id": "crv", "name": "Honda CR-V 1.5T (Китай)", "cc": 1498, "hp": 193, "fuel": "ice"},
+    {"id": "xtrail", "name": "Nissan X-Trail 1.5T (Китай)", "cc": 1497, "hp": 204, "fuel": "ice"},
+    {"id": "tiguan", "name": "VW Tiguan L 2.0T (Китай)", "cc": 1984, "hp": 186, "fuel": "ice"},
+    {"id": "x3", "name": "BMW X3 25i (Китай)", "cc": 1998, "hp": 184, "fuel": "ice"},
+    {"id": "li_l7", "name": "Li Auto L7 (EREV)", "cc": 1496, "hp": 449, "fuel": "hybrid_seq", "note": "указана пиковая мощность электромоторов"},
+    {"id": "zeekr001", "name": "Zeekr 001 одномоторный", "cc": 0, "hp": 272, "fuel": "ev", "note": "указана пиковая мощность"},
+    {"id": "byd_seal", "name": "BYD Seal задний привод", "cc": 0, "hp": 313, "fuel": "ev", "note": "указана пиковая мощность"},
+    {"id": "model_y", "name": "Tesla Model Y RWD (Китай)", "cc": 0, "hp": 299, "fuel": "ev", "note": "указана пиковая мощность"}
+  ]
+}

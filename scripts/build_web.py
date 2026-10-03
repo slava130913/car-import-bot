@@ -24,9 +24,10 @@ if not bot_username:
     bot_username = "YOUR_BOT_USERNAME"
 
 shutil.copyfile(ROOT / "data" / "rules.json", ROOT / "web" / "rules.json")
+shutil.copyfile(ROOT / "data" / "models.json", ROOT / "web" / "models.json")
 (ROOT / "web" / "config.js").write_text(
     "// Генерируется scripts/build_web.py, не редактировать руками\n"
     f"window.APP_CONFIG = {json.dumps({'botUsername': bot_username}, ensure_ascii=False)};\n",
     encoding="utf-8",
 )
-print(f"web/rules.json обновлён, web/config.js: бот @{bot_username}")
+print(f"web/rules.json и web/models.json обновлены, web/config.js: бот @{bot_username}")

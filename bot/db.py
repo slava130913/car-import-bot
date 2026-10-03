@@ -1,7 +1,9 @@
-"""SQLite-хранилище заказов, заявок и расчётов. Нагрузка MVP маленькая, поэтому синхронный sqlite3."""
+"""SQLite-хранилище заказов, заявок, расчётов и переписки с поддержкой. Нагрузка MVP маленькая, поэтому синхронный sqlite3."""
 
 from __future__ import annotations
 
+import csv
+import io
 import json
 import sqlite3
 from datetime import datetime, timezone
@@ -46,6 +48,13 @@ CREATE TABLE IF NOT EXISTS users (
     first_seen TEXT NOT NULL,
     last_seen TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS support (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    admin_id INTEGER NOT NULL,
+    admin_msg_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    created_at TEXT NOT NULL
+);
 """
 
 
@@ -70,6 +79,9 @@ class DB:
         )
         self.conn.commit()
 
+    def all_user_ids(self) -> list[int]:
+        return [int(r[0]) for r in self.conn.execute("SELECT user_id FROM users ORDER BY user_id")]
+
     # calcs
     def add_calc(self, user_id: int, car: dict[str, Any], total: float | None) -> int:
         cur = self.conn.execute(
@@ -78,6 +90,12 @@ class DB:
         )
         self.conn.commit()
         return int(cur.lastrowid)
+
+    def last_calc(self, user_id: int) -> dict[str, Any] | None:
+        row = self.conn.execute(
+            "SELECT input_json FROM calcs WHERE user_id=? ORDER BY id DESC LIMIT 1", (user_id,)
+        ).fetchone()
+        return json.loads(row["input_json"]) if row else None
 
     # orders
     def add_order(self, user_id: int, username: str | None, vin: str, contact: str, price_stars: int) -> int:
@@ -122,6 +140,33 @@ class DB:
 
     def list_leads(self, limit: int = 20) -> list[sqlite3.Row]:
         return self.conn.execute("SELECT * FROM leads ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+
+    # support
+    def add_support(self, admin_id: int, admin_msg_id: int, user_id: int) -> None:
+        self.conn.execute(
+            "INSERT INTO support(admin_id, admin_msg_id, user_id, created_at) VALUES(?,?,?,?)",
+            (admin_id, admin_msg_id, user_id, _now()),
+        )
+        self.conn.commit()
+
+    def support_user(self, admin_id: int, admin_msg_id: int) -> int | None:
+        row = self.conn.execute(
+            "SELECT user_id FROM support WHERE admin_id=? AND admin_msg_id=?", (admin_id, admin_msg_id)
+        ).fetchone()
+        return int(row["user_id"]) if row else None
+
+    # export
+    def export_csv(self) -> bytes:
+        buf = io.StringIO()
+        w = csv.writer(buf, delimiter=";")
+        w.writerow(["тип", "id", "дата", "user_id", "username", "контакт", "VIN / модель", "статус", "бюджет", "город"])
+        for r in self.conn.execute("SELECT * FROM orders ORDER BY id"):
+            w.writerow(["заказ VIN", r["id"], r["created_at"], r["user_id"], r["username"], r["contact"], r["vin"], r["status"], "", ""])
+        for r in self.conn.execute("SELECT * FROM leads ORDER BY id"):
+            w.writerow(["заявка", r["id"], r["created_at"], r["user_id"], r["username"], r["contact"], r["model"], r["status"], r["budget"], r["city"]])
+        for r in self.conn.execute("SELECT c.*, u.username FROM calcs c LEFT JOIN users u ON u.user_id=c.user_id ORDER BY c.id"):
+            w.writerow(["расчёт", r["id"], r["created_at"], r["user_id"], r["username"], "", r["input_json"], "", r["total"], ""])
+        return ("﻿" + buf.getvalue()).encode("utf-8")
 
     # stats
     def stats(self) -> dict[str, int]:
