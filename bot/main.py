@@ -434,7 +434,7 @@ async def lead_city(m: Message, state: FSMContext) -> None:
         keyboard=[[KeyboardButton(text="Отправить мой номер", request_contact=True)], [KeyboardButton(text="Отмена")]],
         resize_keyboard=True,
     )
-    await m.answer("Телефон или @username для связи:", reply_markup=kb)
+    await m.answer("Телефон или @username для связи. Оставляя контакт, вы соглашаетесь на передачу его агенту по подбору:", reply_markup=kb)
 
 
 @router.message(Lead.contact)
@@ -499,6 +499,28 @@ async def admin_done(m: Message, bot: Bot) -> None:
         await bot.send_message(order["user_id"], f"Заказ #{order['id']} выполнен. Если отчёт ещё не пришёл, напишите нам.")
     except Exception as e:  # noqa: BLE001
         log.warning("notify user failed: %s", e)
+
+
+@router.message(F.document, F.caption.regexp(r"^/send\s+\d+"))
+async def admin_send_report(m: Message, bot: Bot) -> None:
+    """Админ прикрепляет файл отчёта с подписью «/send <номер заказа>»: бот пересылает клиенту и закрывает заказ."""
+    if not _is_admin(m):
+        return
+    order_id = int(m.caption.split()[1])
+    order = db.get_order(order_id)
+    if not order:
+        await m.answer("Заказ не найден.")
+        return
+    try:
+        await bot.send_document(
+            order["user_id"], m.document.file_id,
+            caption=f"Отчёт по VIN {order['vin']} готов. Если есть вопросы по отчёту, напишите нам здесь.",
+        )
+    except Exception as e:  # noqa: BLE001
+        await m.answer(f"Не удалось отправить клиенту: {e}")
+        return
+    db.mark_done(order_id)
+    await m.answer(f"Отчёт отправлен, заказ #{order_id} закрыт.")
 
 
 @router.message(Command("stats"))

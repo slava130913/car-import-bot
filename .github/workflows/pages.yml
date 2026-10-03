@@ -1,0 +1,43 @@
+# Публикует папку web/ на GitHub Pages при каждом пуше в main.
+# После первого запуска: Settings → Pages → Source: GitHub Actions. Адрес будет https://<user>.github.io/<repo>/
+# В Settings → Secrets and variables → Actions → Variables добавьте BOT_USERNAME (username бота без @).
+name: Deploy web calculator
+
+on:
+  push:
+    branches: [main]
+    paths: ["web/**", "data/rules.json", "scripts/build_web.py", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python scripts/build_web.py
+        env:
+          BOT_USERNAME: ${{ vars.BOT_USERNAME }}
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

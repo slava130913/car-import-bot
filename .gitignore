@@ -3,3 +3,6 @@
 __pycache__/
 .pytest_cache/
 *.pyc
+reports/
+.venv/
+web/config.js

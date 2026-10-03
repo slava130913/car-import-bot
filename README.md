@@ -7,7 +7,7 @@ Telegram-бот и веб-калькулятор для тех, кто приг�
 - **Калькулятор «под ключ»**: цена, перевод денег, расходы в Китае, логистика по маршрутам, пошлина по единым ставкам для физлиц, утильсбор (льготный и коммерческий), таможенный сбор, СБКТС, ЭПТС, доставка по России. Электромобили и последовательные гибриды считаются по схеме пошлина + акциз + НДС.
 - **Заказ проверки по VIN**: клиент вводит VIN и контакт, платит в Telegram Stars (или по инструкции), админу приходит уведомление. Отчёт на этом этапе делается вручную.
 - **Заявка «хочу пригнать»**: модель, бюджет, город, контакт. Передаётся агентам.
-- **Админ-команды**: `/orders`, `/leads`, `/done <id>`, `/stats`.
+- **Админ-команды**: `/orders`, `/leads`, `/done <id>`, `/stats`. Готовый отчёт отправляется клиенту так: прикрепить файл в чат с ботом и подписать `/send <id>`.
 - **Веб-версия** калькулятора и лендинг в `web/`, работает как обычный сайт и как Telegram Mini App.
 
 Все ставки лежат в одном файле `data/rules.json` с датой версии и ссылками на источники. Код чисел не содержит.
@@ -22,36 +22,46 @@ bot/main.py          Telegram-бот (aiogram 3)
 bot/db.py            SQLite: пользователи, расчёты, заказы, заявки
 web/index.html       лендинг + калькулятор
 web/calc.js          порт engine.py на JS
-scripts/export_rules.py  копирует rules.json в web/
+scripts/build_web.py     копирует rules.json в web/ и пишет web/config.js (username бота)
+scripts/vin_report.py    перевод китайского отчёта по VIN и сборка HTML-отчёта
+run.ps1                  запуск на Windows одной командой
+deploy/install.sh        установка на VPS как systemd-сервис
+docs/launch-checklist.md чек-лист запуска, шаблоны текстов
 tests/               юнит-тесты, тест паритета Python и JS, тест базы
 ```
 
 ## Запуск бота
 
+Windows, одной командой (создаст окружение, поставит зависимости, соберёт сайт, запустит бота):
+
+```bash
+powershell -ExecutionPolicy Bypass -File run.ps1
+```
+
+Перед этим заполните `.env` (файл уже создан из `.env.example`): `BOT_TOKEN` от @BotFather, `ADMIN_IDS` (ваш Telegram id, узнать у @userinfobot), `BOT_USERNAME`, `VIN_PRICE_STARS` (цена отчёта в Stars, 0 = оплата вне бота).
+
+Вручную:
+
 ```bash
 pip install -r requirements.txt
-copy .env.example .env
-```
-
-Заполните `.env`: `BOT_TOKEN` от @BotFather, `ADMIN_IDS` (ваш Telegram id, узнать у @userinfobot), `VIN_PRICE_STARS` (цена отчёта в Stars, 0 = оплата вне бота).
-
-```bash
+python scripts/build_web.py
 python -m bot.main
 ```
+
+VPS (Ubuntu): `sudo bash deploy/install.sh`. Docker: `docker compose up -d`.
 
 ## Веб-калькулятор
 
 Опубликованная копия (приватная, HTTPS, подходит как URL для Mini App после открытия доступа): https://claude.ai/artifact/XxxCXRABsy83WNQeNMMbcT
 
 ```bash
-python scripts/export_rules.py
-cd web
-python -m http.server 8080
+python scripts/build_web.py
+python -m http.server 8080 --directory web
 ```
 
-Откройте http://localhost:8080. В `web/index.html` замените `YOUR_BOT_USERNAME` на username бота.
+Откройте http://localhost:8080. Username бота берётся из `.env` → `BOT_USERNAME`.
 
-Для продакшена положите папку `web/` на любой статический хостинг с HTTPS (GitHub Pages, Vercel, Timeweb). Чтобы сделать Mini App: в @BotFather → Bot Settings → Menu Button → укажите URL страницы.
+Продакшен: при пуше в GitHub папка `web/` автоматически выкладывается на GitHub Pages (workflow в `.github/workflows/pages.yml`). В настройках репозитория: Settings → Pages → Source: GitHub Actions; Settings → Variables → `BOT_USERNAME`. Чтобы сделать Mini App: @BotFather → Bot Settings → Menu Button → URL страницы.
 
 ## Тесты
 
@@ -67,6 +77,13 @@ python -m pytest -q
 2. Запустите тесты. Если менялись льготные пороги или сетка, поправьте ожидания в `tests/test_engine.py`.
 3. Запустите `python scripts/export_rules.py` и перевыложите `web/`.
 4. Перезапустите бота.
+
+## Отчёт по VIN вручную
+
+1. Заказ приходит админу с VIN и контактом.
+2. Купите китайский отчёт (Taobao: «车辆历史报告», или через агента), сохраните текст в файл.
+3. `python scripts/vin_report.py <VIN> report.txt` → `reports/<VIN>.html` (нужен `ANTHROPIC_API_KEY` в `.env`). Проверьте глазами.
+4. Прикрепите файл в чат с ботом с подписью `/send <номер заказа>`. Бот отправит клиенту и закроет заказ.
 
 ## Что требует проверки перед запуском на людей
 
