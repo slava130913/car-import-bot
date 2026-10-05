@@ -339,3 +339,12 @@ def test_partner_deep_link_marks_admin_message(env):
     m = run(flow())
     assert "Партнёрство" in texts(m)
     assert any("Заявка на партнёрство" in t for _, t in fbot.sent)
+
+
+def test_partner_text_has_terms_and_calc_wins_over_support():
+    t = bm.PARTNER_TEXT
+    assert "15%" in t and "15 000 ₽" in t and "пополам" in t and "/calc" in t
+    assert "github" not in t and "бесплатно" not in t.lower()
+    handlers = [h.callback for h in bm.router.message.handlers]
+    # /calc из режима «Написать нам» должен попасть в расчёт: обработчик команды зарегистрирован раньше
+    assert handlers.index(bm.calc_start) < handlers.index(bm.support_message)
