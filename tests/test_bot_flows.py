@@ -60,7 +60,7 @@ class FakeBot:
     def __init__(self) -> None:
         self.sent: list[tuple[int, str]] = []
 
-    async def send_message(self, chat_id: int, text: str) -> None:
+    async def send_message(self, chat_id: int, text: str, **kw: Any) -> None:
         self.sent.append((chat_id, text))
 
 
@@ -184,6 +184,8 @@ def test_lead_flow_and_admin_commands(env):
         await bm.lead_model(Msg(text="Zeekr 001 2024", outbox=m.outbox), state)
         await bm.lead_budget(Msg(text="4.5 млн", outbox=m.outbox), state)
         await bm.lead_city(Msg(text="Тула", outbox=m.outbox), state)
+        assert await state.get_state() == bm.Lead.timeline.state
+        await bm.lead_timeline(Cb(data="lt:now", message=Msg(outbox=m.outbox)), state)
         await bm.lead_contact(Msg(text="@buyer", outbox=m.outbox), state, fbot)
         admin = Msg(text="/leads", from_user=User(id=ADMIN_ID, username="admin"))
         await bm.admin_leads(admin)
@@ -196,7 +198,8 @@ def test_lead_flow_and_admin_commands(env):
     m, admin, stats, stranger = run(flow())
     assert "Заявка #1 принята" in texts(m)
     assert "Zeekr 001" in fbot.sent[0][1] and "Тула" in fbot.sent[0][1]
-    assert "Zeekr 001" in texts(admin)
+    assert "🔥" in fbot.sent[0][1] and "В этом месяце" in fbot.sent[0][1]
+    assert "Zeekr 001" in texts(admin) and "🆕 Новая" in texts(admin)
     assert "Заявок: 1" in texts(stats)
     assert stranger.outbox == []
 

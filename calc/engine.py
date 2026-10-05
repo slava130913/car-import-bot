@@ -194,7 +194,12 @@ def customs_fee(rules: dict[str, Any], price_rub: float) -> float:
 
 # ---------- основной расчёт ----------
 
-def calculate(car: CarInput, rules: dict[str, Any] | None = None) -> Result:
+def calculate(car: CarInput, rules: dict[str, Any] | None = None, extras: list[tuple[str, float]] | None = None) -> Result:
+    """Полный расчёт под ключ.
+
+    extras: дополнительные строки компании, которая считает для клиента (например, её комиссия или услуги),
+    пары (название, сумма в рублях). Добавляются в конец и входят в итог.
+    """
     rules = rules or load_rules()
     fb = rules["fallback_rates"]
     cny_rub = car.cny_rub or fb["CNY"]
@@ -231,6 +236,9 @@ def calculate(car: CarInput, rules: dict[str, Any] | None = None) -> Result:
 
     dm = costs["domestic"].get(car.destination) or costs["domestic"]["moscow"]
     res.lines.append(Line("domestic", f"Доставка по России: {dm['label']}", dm["mid"], dm["low"], dm["high"]))
+    for i, (label, amount) in enumerate(extras or []):
+        if amount:
+            res.lines.append(Line(f"extra{i}", str(label), round(float(amount))))
 
     # предупреждения
     pref = rules["util"]["preferential"]

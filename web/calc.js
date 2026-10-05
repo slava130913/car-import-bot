@@ -119,7 +119,8 @@
     return Math.round(v).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   }
 
-  function calculate(car, rules) {
+  // extras: строки компании, которая считает для клиента: [[название, сумма в рублях], ...]
+  function calculate(car, rules, extras) {
     const fb = rules.fallback_rates;
     const cnyRub = car.cny_rub || fb.CNY;
     const eurRub = car.eur_rub || fb.EUR;
@@ -151,6 +152,9 @@
     }
     const dm = costs.domestic[car.destination] || costs.domestic.moscow;
     res.lines.push(line("domestic", `Доставка по России: ${dm.label}`, dm.mid, dm.low, dm.high));
+    (extras || []).forEach(([label, amount], i) => {
+      if (amount) res.lines.push(line(`extra${i}`, String(label), pyRound(Number(amount))));
+    });
 
     const pref = rules.util.preferential;
     const ev = isEvScheme(car.fuel);

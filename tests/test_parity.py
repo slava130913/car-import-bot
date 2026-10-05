@@ -29,7 +29,7 @@ NODE_SCRIPT = """
 const C = require(process.argv[2]);
 const rules = JSON.parse(require('fs').readFileSync(process.argv[3], 'utf8'));
 const cases = JSON.parse(require('fs').readFileSync(process.argv[4], 'utf8'));
-process.stdout.write(JSON.stringify(cases.map(c => C.calculate(c, rules))));
+process.stdout.write(JSON.stringify(cases.map(c => C.calculate(c.car, rules, c.extras))));
 """
 
 
@@ -37,8 +37,12 @@ process.stdout.write(JSON.stringify(cases.map(c => C.calculate(c, rules))));
 def test_js_matches_python(tmp_path: Path):
     rules = load_rules()
     cases = [dict(c, **RATES) for c in CASES]
+    # те же машины в боте клиента: его услуги отдельной строкой
+    extras_list = [[] for _ in cases] + [[["Услуги АвтоМост", 60000]] for _ in cases]
+    cases = cases + cases
+    payload = [{"car": c, "extras": e} for c, e in zip(cases, extras_list)]
     cases_file = tmp_path / "cases.json"
-    cases_file.write_text(json.dumps(cases), encoding="utf-8")
+    cases_file.write_text(json.dumps(payload), encoding="utf-8")
     script = tmp_path / "run.js"
     script.write_text(NODE_SCRIPT, encoding="utf-8")
     out = subprocess.run(
@@ -47,8 +51,8 @@ def test_js_matches_python(tmp_path: Path):
     )
     js_results = json.loads(out.stdout)
     assert len(js_results) == len(cases)
-    for case, js in zip(cases, js_results):
-        py = calculate(CarInput(**case), rules).as_dict()
+    for case, extras, js in zip(cases, extras_list, js_results):
+        py = calculate(CarInput(**case), rules, [tuple(x) for x in extras]).as_dict()
         assert js["total_mid"] == py["total_mid"], case
         assert js["total_low"] == py["total_low"], case
         assert js["total_high"] == py["total_high"], case
