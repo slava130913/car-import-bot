@@ -43,7 +43,7 @@ jobs:
       - name: Publish site to reg.ru
         env:
           REGRU_FTP_HOST: ${{ vars.REGRU_FTP_HOST }}
-          REGRU_FTP_USER: ${{ vars.REGRU_FTP_USER }}
+          REGRU_FTP_USER: ${{ secrets.REGRU_FTP_LOGIN || vars.REGRU_FTP_USER }}
           REGRU_SITE_DIR: ${{ vars.REGRU_SITE_DIR }}
           REGRU_FTP_INSECURE: ${{ vars.REGRU_FTP_INSECURE }}
           SITE_URL: ${{ vars.SITE_URL }}

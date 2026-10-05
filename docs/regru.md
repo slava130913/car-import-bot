@@ -43,7 +43,7 @@ https://git.myapphub.tech/myapphub/car-import-bot → Settings → Actions → *
 | Имя | Значение |
 |---|---|
 | `REGRU_FTP_HOST` | `server298.hosting.reg.ru` |
-| `REGRU_FTP_USER` | `u3639514` |
+| `REGRU_FTP_USER` | `u3639514` (или секрет `REGRU_FTP_LOGIN`) |
 | `REGRU_SITE_DIR` | `www/myapphub.tech/car` |
 | `SITE_URL` | `https://myapphub.tech/car` |
 
