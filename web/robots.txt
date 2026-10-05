@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://slava130913.github.io/car-import-bot/sitemap.xml

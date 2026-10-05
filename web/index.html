@@ -111,6 +111,7 @@
   <footer>
     <p id="disclaimer"></p>
     <p>Источники ставок: <span id="sources"></span></p>
+    <p><a href="auto/">Расчёт по популярным моделям</a> · <a href="partners.html">Партнёрам</a></p>
   </footer>
 </div>
 
@@ -147,6 +148,8 @@
         $("cc").value = o.dataset.cc; $("hp").value = o.dataset.hp; $("fuel").value = o.dataset.fuel;
         $("modelNote").textContent = (o.dataset.note ? o.dataset.note + ". " : "") + data.note;
       });
+      const m = (location.hash || "").match(/^#model-([a-z0-9_]+)$/);
+      if (m && sel.querySelector(`option[value="${m[1]}"]`)) { sel.value = m[1]; sel.dispatchEvent(new Event("change")); }
     } catch (e) { /* список моделей необязателен */ }
   }
 

@@ -31,3 +31,7 @@ shutil.copyfile(ROOT / "data" / "models.json", ROOT / "web" / "models.json")
     encoding="utf-8",
 )
 print(f"web/rules.json и web/models.json обновлены, web/config.js: бот @{bot_username}")
+
+# Страницы моделей для поиска, sitemap.xml и robots.txt
+import subprocess, sys as _sys
+subprocess.run([_sys.executable, str(ROOT / "scripts" / "build_seo.py")], check=True)

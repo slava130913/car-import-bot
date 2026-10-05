@@ -32,6 +32,7 @@ web/index.html       лендинг + калькулятор
 web/calc.js          порт engine.py на JS
 scripts/build_web.py     копирует rules.json в web/ и пишет web/config.js (username бота)
 scripts/vin_report.py    перевод китайского отчёта по VIN и сборка HTML-отчёта
+scripts/build_seo.py     страницы «сколько стоит пригнать модель X» для поиска, sitemap.xml, robots.txt (запускается из build_web.py)
 run.ps1                  запуск на Windows одной командой
 deploy/install.sh        установка на VPS как systemd-сервис
 docs/launch-checklist.md чек-лист запуска, шаблоны текстов
