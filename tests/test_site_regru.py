@@ -128,6 +128,51 @@ def test_open_site_dir_creates_subfolder_only_inside_existing_site():
     assert dr.open_site_dir(ftp, "www/myapphub.tech/car") and ftp.made == []
 
 
+def test_without_php_api_is_not_published_and_form_hidden(tmp_path):
+    """PHP на сайте выключен: .php отдались бы как текст вместе с токеном. Такие файлы не выкладываем,
+    а уже выложенные удаляются по списку."""
+    base = tmp_path / "s"
+    dr.stage(base, "123456:" + "D" * 35)
+    (base / "config.js").write_text('window.APP_CONFIG = {"botUsername": "x_bot", "leadUrl": "api/lead.php"};\n', encoding="utf-8")
+    ftp = FakeFTP()
+    dr.sync(ftp, base)
+    assert "api/config.php" in ftp.files
+    dr.drop_api(base)
+    up, rm = dr.sync(ftp, base)
+    assert not [f for f in ftp.files if f.startswith("api/")]
+    assert '"leadUrl": ""' in ftp.files["config.js"].decode()
+
+
+class ProbeFTP(FakeFTP):
+    def delete(self, name: str) -> None:
+        self.files.pop(name, None)
+        self.deleted.append(name)
+
+
+def test_php_probe_reads_executed_output(monkeypatch):
+    class Resp(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    ftp = ProbeFTP()
+    monkeypatch.setattr(dr.urllib.request, "urlopen", lambda url, timeout=0: Resp(b"php-ok-42"))
+    assert dr.php_works(ftp, "https://example.test/car") and dr.PROBE in ftp.deleted
+    # PHP выключен: сервер отдаёт исходник файла
+    src = b"<?php echo 'php-ok-' . (6 * 7);\n"
+    monkeypatch.setattr(dr.urllib.request, "urlopen", lambda url, timeout=0: Resp(src))
+    assert not dr.php_works(ProbeFTP(), "https://example.test/car")
+    assert not dr.php_works(ProbeFTP(), "")
+
+
+def test_token_label_rotated():
+    t = "123456:" + "A" * 35
+    import hmac as _h, hashlib as _hl
+    assert site_token(t) != _h.new(t.encode(), b"site-leads", _hl.sha256).hexdigest()
+
+
 def test_deploy_skips_without_hosting_settings(monkeypatch):
     for k in ("REGRU_FTP_HOST", "REGRU_FTP_USER", "REGRU_FTP_PASSWORD"):
         monkeypatch.delenv(k, raising=False)

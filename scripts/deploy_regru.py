@@ -23,6 +23,7 @@ import hmac
 import io
 import json
 import os
+import re
 import shutil
 import ssl
 import sys
@@ -34,11 +35,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 MANIFEST = ".deploy-manifest.json"
 SKIP_PARTS = {"__pycache__", ".git", "data"}
+# Метка в HMAC токена выдачи заявок. Сменить (и в bot/site_leads.py), если токен утёк: старый перестанет работать.
+SITE_TOKEN_LABEL = b"site-leads/2"
+PROBE = "api/php-probe.php"
 
 
 def site_token(bot_token: str) -> str:
     """Токен выдачи заявок боту. bot/site_leads.py считает его так же."""
-    return hmac.new(bot_token.encode(), b"site-leads", hashlib.sha256).hexdigest()
+    return hmac.new(bot_token.encode(), SITE_TOKEN_LABEL, hashlib.sha256).hexdigest()
 
 
 def stage(dest: Path, bot_token: str) -> None:
@@ -52,6 +56,36 @@ def stage(dest: Path, bot_token: str) -> None:
         f"return ['token' => '{token}', 'salt' => '{salt}'];\n",
         encoding="utf-8",
     )
+
+
+def drop_api(base: Path) -> None:
+    """PHP на сайте не работает: приём заявок не выкладываем (иначе .php с токеном отдадутся как текст),
+    форму на странице скрываем. Ранее выложенные файлы api/ удалит sync по списку."""
+    shutil.rmtree(base / "api", ignore_errors=True)
+    cfg = base / "config.js"
+    if cfg.is_file():
+        text = cfg.read_text(encoding="utf-8")
+        cfg.write_text(re.sub(r'"leadUrl":\s*"[^"]*"', '"leadUrl": ""', text), encoding="utf-8")
+
+
+def php_works(ftp: ftplib.FTP, site_url: str) -> bool:
+    """Кладёт на сайт файл без секретов, который печатает строку только если PHP выполняется, и открывает его.
+    Если PHP выключен, сервер отдаст исходник: в нём нет строки php-ok-<число>."""
+    if not site_url:
+        return False
+    made: set[str] = set()
+    ensure_dirs(ftp, PROBE, made)
+    ftp.storbinary(f"STOR {PROBE}", io.BytesIO(b"<?php echo 'php-ok-' . (6 * 7);\n"))
+    try:
+        with urllib.request.urlopen(f"{site_url.rstrip('/')}/{PROBE}", timeout=20) as r:
+            return r.read(200).decode("utf-8", "replace").strip() == "php-ok-42"
+    except Exception:  # noqa: BLE001
+        return False
+    finally:
+        try:
+            ftp.delete(PROBE)
+        except ftplib.error_perm:
+            pass
 
 
 def manifest_of(base: Path) -> dict[str, str]:
@@ -217,9 +251,13 @@ def main() -> int:
             if not open_site_dir(ftp, site_dir):
                 print(f"::error::На хостинге нет папки {site_dir}. Создайте сайт в панели reg.ru (ispmanager → Сайты).")
                 return 1
+            site_url = os.environ.get("SITE_URL", "").strip()
+            if not php_works(ftp, site_url):
+                print("::warning::PHP на сайте не выполняется (или SITE_URL не задан): форма заявок скрыта, приём заявок "
+                      "не выложен. Включите PHP для сайта в ispmanager (Сайты → сайт → PHP), выкладка подхватит сама.")
+                drop_api(base)
             up, rm = sync(ftp, base)
         print(f"reg.ru: загружено {up}, удалено {rm}, папка {site_dir}")
-    site_url = os.environ.get("SITE_URL", "").strip()
     if site_url:
         check_site(site_url)
     return 0

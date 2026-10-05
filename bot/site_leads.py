@@ -13,8 +13,12 @@ import hmac
 import aiohttp
 
 
+# Должна совпадать с SITE_TOKEN_LABEL в scripts/deploy_regru.py; смена метки отзывает утёкший токен.
+SITE_TOKEN_LABEL = b"site-leads/2"
+
+
 def site_token(bot_token: str) -> str:
-    return hmac.new(bot_token.encode(), b"site-leads", hashlib.sha256).hexdigest()
+    return hmac.new(bot_token.encode(), SITE_TOKEN_LABEL, hashlib.sha256).hexdigest()
 
 
 async def fetch_leads(session: aiohttp.ClientSession, url: str, token: str, after: int) -> tuple[list[dict], int, str]:
