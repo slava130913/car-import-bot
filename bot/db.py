@@ -87,6 +87,10 @@ CREATE TABLE IF NOT EXISTS tenants (
     reminder_sent INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS meta (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
 """
 
 # Колонки, добавленные после первого релиза: (таблица, колонка, определение)
@@ -100,6 +104,7 @@ MIGRATIONS = [
     ("calcs", "tenant_id", f"TEXT NOT NULL DEFAULT '{MAIN}'"),
     ("support", "tenant_id", f"TEXT NOT NULL DEFAULT '{MAIN}'"),
     ("tenants", "reminder_sent", "INTEGER NOT NULL DEFAULT 0"),
+    ("leads", "source", "TEXT"),
 ]
 
 LEAD_STATUSES = {"new": "🆕 Новая", "work": "🟡 В работе", "won": "✅ Сделка", "lost": "❌ Отказ"}
@@ -127,6 +132,16 @@ class DB:
             cols = {r["name"] for r in self.conn.execute(f"PRAGMA table_info({table})")}
             if col not in cols:
                 self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
+        self.conn.commit()
+
+    # meta: служебные значения (например, номер последней заявки, забранной с сайта)
+    def get_meta(self, key: str, default: str = "") -> str:
+        r = self.conn.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
+        return r["value"] if r else default
+
+    def set_meta(self, key: str, value: str) -> None:
+        self.conn.execute("INSERT INTO meta(key, value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                          (key, value))
         self.conn.commit()
 
     # users
@@ -220,11 +235,12 @@ class DB:
 
     # leads
     def add_lead(self, user_id: int, username: str | None, model: str, budget: str, city: str, contact: str,
-                 tenant_id: str = MAIN, timeline: str | None = None, calc_summary: str | None = None) -> int:
+                 tenant_id: str = MAIN, timeline: str | None = None, calc_summary: str | None = None,
+                 source: str | None = None) -> int:
         cur = self.conn.execute(
-            "INSERT INTO leads(user_id, username, model, budget, city, contact, created_at, tenant_id, timeline, calc_summary) "
-            "VALUES(?,?,?,?,?,?,?,?,?,?)",
-            (user_id, username, model, budget, city, contact, _now(), tenant_id, timeline, calc_summary),
+            "INSERT INTO leads(user_id, username, model, budget, city, contact, created_at, tenant_id, timeline, calc_summary, "
+            "source) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+            (user_id, username, model, budget, city, contact, _now(), tenant_id, timeline, calc_summary, source),
         )
         self.conn.commit()
         return int(cur.lastrowid)

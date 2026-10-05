@@ -1,0 +1,9 @@
+# Служебные файлы не открываются по прямой ссылке; папка data/ закрыта своим .htaccess.
+<FilesMatch "^(_lib|config)\.php$">
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+  <IfModule !mod_authz_core.c>
+    Deny from all
+  </IfModule>
+</FilesMatch>

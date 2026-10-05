@@ -26,7 +26,10 @@ python D:\Claude\git\scripts\ci.py set-secret DEPLOY_ENV_FILE --repo myapphub/ca
 
 ### 2. Домен сайта
 
-Сейчас сайт работает на GitHub Pages: https://slava130913.github.io/car-import-bot/. Чтобы отдавать его со своего сервера:
+Основной вариант: сайт и форма заявок на хостинге reg.ru, заявки хранятся в РФ. Шаги в [regru.md](regru.md).
+
+Запасной вариант: отдавать статику со своего сервера (без формы заявок, PHP там нет). Сейчас сайт работает на
+GitHub Pages: https://slava130913.github.io/car-import-bot/.
 
 1. reg.ru → DNS `myapphub.tech` → A-запись `car` → `188.166.91.146`.
 2. В Caddyfile Студии (`/opt/bytoprompt-studio/deploy/Caddyfile`, эталон `D:\Codex\mygit\deploy\Caddyfile.git`) добавить блок:

@@ -12,9 +12,11 @@ import json
 import logging
 import os
 import re
+import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
+import aiohttp
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.filters import Command, CommandObject, CommandStart, StateFilter
 from aiogram.fsm.context import FSMContext
@@ -37,6 +39,7 @@ from calc.rates import get_rates
 
 from . import faq
 from . import tenants as tn
+from .site_leads import fetch_leads, site_token
 from .ai import AI, AIError, build_facts
 from .db import DB, LEAD_STATUSES, MAIN
 from .texts import EXPLAIN, EXPLAIN_TITLES, GUIDE, GUIDE_TITLES
@@ -76,6 +79,9 @@ BRAND_NAME = fix_mojibake(os.environ.get("BRAND_NAME", "").strip())
 MANAGER_CONTACT = fix_mojibake(os.environ.get("MANAGER_CONTACT", "").strip())
 
 TRIAL_DAYS = int(os.environ.get("TRIAL_DAYS", "7"))
+# Заявки с формы на сайте (хостинг reg.ru): бот забирает их отсюда раз в минуту. Пустое значение выключает.
+SITE_LEADS_URL = os.environ.get("SITE_LEADS_URL", "https://car.myapphub.tech/api/leads.php").strip()
+SITE_LEADS_INTERVAL = 60
 # Контакт платформы для клиентов: куда писать об оплате и вопросах по их боту
 # Режим платформы: самостоятельный запуск ботов клиентов и команды /tenants. В отдельном экземпляре для клиента
 # (BRAND_NAME задан) по умолчанию выключен, чтобы покупатели клиента не видели «Запустить свой бот».
@@ -986,7 +992,7 @@ def _lead_card(lead_id: int, d: dict, contact: str, username: str | None, user_i
         f"Город: {d.get('city')}",
         f"Когда покупка: {when}",
         f"Контакт: {contact}",
-        f"От: @{username or '-'} (id {user_id})",
+        f"От: @{username or '-'} (id {user_id})" if user_id else "От: форма на сайте (без Telegram), позвоните клиенту",
     ]
     if summary:
         lines.append(f"Последний расчёт: {summary}")
@@ -1644,6 +1650,60 @@ async def check_billing(bot: Bot) -> None:
                                  f"Продлили: /tenant_on {row['id']} 30, отключить: /tenant_off {row['id']}", admins=ADMIN_IDS)
 
 
+async def ingest_site_leads(bot: Bot, leads: list[dict]) -> int:
+    """Новые заявки с сайта: в базу основного бота и менеджерам с кнопками статуса. Возвращает число новых."""
+    after = int(db.get_meta("site_leads_after", "0") or 0)
+    added = 0
+    for sl in sorted(leads, key=lambda x: x["id"]):
+        if sl["id"] <= after:
+            continue
+        name = str(sl.get("name") or "").strip()[:80]
+        phone = str(sl.get("phone") or "").strip()[:40]
+        contact = f"{phone} ({name})" if name else phone
+        model = str(sl.get("model") or "").strip()[:80] or "не выбрана"
+        total = sl.get("total")
+        budget = f"по расчёту {format_rub(total)}" if isinstance(total, int) and total > 0 else "не указан"
+        city = str(sl.get("city") or "").strip()[:60] or "не указан"
+        when = sl.get("when") if sl.get("when") in TIMELINES else None
+        summary = str(sl.get("calc") or "").strip()[:400] or None
+        with tn.use(_main_tenant()):
+            lead_id = db.add_lead(0, None, model, budget, city, contact, tenant_id=MAIN, timeline=when,
+                                  calc_summary=summary, source="site")
+            await notify_admins(bot, _lead_card(lead_id, {"model": model, "budget": budget, "city": city, "timeline": when},
+                                                contact, None, 0, summary), reply_markup=lead_status_kb(lead_id))
+        after = sl["id"]
+        db.set_meta("site_leads_after", str(after))
+        added += 1
+    return added
+
+
+async def site_leads_watch(bot: Bot) -> None:
+    """Раз в минуту забирает заявки с сайта. Ошибки (сайт ещё не выложен, нет сети) пишет в журнал не чаще раза в час."""
+    if not SITE_LEADS_URL or not BOT_TOKEN:
+        return
+    token = site_token(BOT_TOKEN)
+    warned_at = 0.0
+    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as session:
+        while True:
+            try:
+                after = int(db.get_meta("site_leads_after", "0") or 0)
+                leads, last = await fetch_leads(session, SITE_LEADS_URL, token, after)
+                if last < after:
+                    log.warning("site leads: на сайте последняя заявка #%d, у бота #%d; файл заявок начат заново", last, after)
+                    db.set_meta("site_leads_after", "0")
+                    continue
+                n = await ingest_site_leads(bot, leads)
+                if n:
+                    log.info("site leads: %d new", n)
+                    if len(leads) >= 100:
+                        continue
+            except Exception as e:  # noqa: BLE001
+                if time.monotonic() - warned_at > 3600:
+                    log.warning("site leads: %s", e)
+                    warned_at = time.monotonic()
+            await asyncio.sleep(SITE_LEADS_INTERVAL)
+
+
 async def trial_watch(bot: Bot) -> None:
     while True:
         try:
@@ -1815,9 +1875,11 @@ async def main() -> None:
         except Exception:  # noqa: BLE001
             log.exception("tenant %s failed to start", row["id"])
     log.info("tenant bots started: %d", started)
-    watch = asyncio.create_task(trial_watch(bot))  # ссылка держит задачу живой
+    watch = asyncio.create_task(trial_watch(bot))  # ссылки держат задачи живыми
+    site_watch = asyncio.create_task(site_leads_watch(bot))
     await RUNNER.wait()
     watch.cancel()
+    site_watch.cancel()
 
 
 if __name__ == "__main__":

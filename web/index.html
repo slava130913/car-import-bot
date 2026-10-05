@@ -46,6 +46,12 @@
   .cta a { flex: 1 1 200px; text-align: center; text-decoration: none; padding: 12px; border-radius: 8px; background: var(--accent); color: var(--accent-fg); font-weight: 600; }
   .cta a.secondary { background: transparent; color: var(--fg); border: 1px solid var(--line); }
   .steps li { margin-bottom: 8px; }
+  label.check { display: flex; gap: 8px; align-items: flex-start; margin-top: 12px; color: var(--fg); }
+  label.check input { width: auto; margin-top: 4px; }
+  label.check a { color: inherit; }
+  .hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+  #lfMsg { margin-top: 10px; }
+  #lfMsg.ok { color: var(--ok); font-size: 15px; }
   footer { margin-top: 48px; font-size: 13px; color: var(--muted); }
   footer a { color: inherit; }
 </style>
@@ -98,6 +104,28 @@
     <a id="leadLink" class="secondary" href="#" target="_blank" rel="noopener">Оставить заявку на подбор</a>
   </div>
 
+  <div id="leadBox" class="card" style="margin-top:16px; display:none">
+    <h2 style="margin-top:0">Заявка на подбор и доставку</h2>
+    <p class="muted" style="margin-top:0">Без Telegram: оставьте телефон, менеджер перезвонит в рабочее время. Последний расчёт приложится к заявке.</p>
+    <form id="leadForm" novalidate>
+      <div class="grid">
+        <div><label for="lfName">Как к вам обращаться</label><input id="lfName" maxlength="80" autocomplete="name"></div>
+        <div><label for="lfPhone">Телефон</label><input id="lfPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+7 900 000-00-00" maxlength="40"></div>
+        <div><label for="lfCity">Город</label><input id="lfCity" maxlength="60" autocomplete="address-level2"></div>
+        <div><label for="lfWhen">Когда планируете покупку</label>
+          <select id="lfWhen">
+            <option value="now">В этом месяце</option>
+            <option value="soon" selected>В ближайшие 3 месяца</option>
+            <option value="later">Пока присматриваюсь</option>
+          </select></div>
+      </div>
+      <div class="hp" aria-hidden="true"><label for="lfWebsite">Сайт</label><input id="lfWebsite" tabindex="-1" autocomplete="off"></div>
+      <label class="check"><input id="lfConsent" type="checkbox"> <span>Согласен на обработку телефона и имени для связи по заявке (<a href="privacy.html" target="_blank" rel="noopener">политика</a>)</span></label>
+      <button type="submit" id="lfSend">Отправить заявку</button>
+      <div id="lfMsg" class="muted" role="status"></div>
+    </form>
+  </div>
+
   <h2>Как это работает</h2>
   <ol class="steps">
     <li>Считаете стоимость под ключ здесь или в боте. Бесплатно.</li>
@@ -111,7 +139,7 @@
   <footer>
     <p id="disclaimer"></p>
     <p>Источники ставок: <span id="sources"></span></p>
-    <p><a href="auto/">Расчёт по популярным моделям</a> · <a href="guide/">Гид: утильсбор, растаможка, маршруты, города</a> · <a href="partners.html">Партнёрам</a></p>
+    <p><a href="auto/">Расчёт по популярным моделям</a> · <a href="guide/">Гид: утильсбор, растаможка, маршруты, города</a> · <a href="partners.html">Партнёрам</a> · <a href="privacy.html">Персональные данные</a></p>
   </footer>
 </div>
 
@@ -146,6 +174,16 @@
   }
   $("vinLink").href = `https://t.me/${BOT_USERNAME}?start=vin`;
   $("leadLink").href = `https://t.me/${BOT_USERNAME}?start=lead`;
+
+  // Форма заявки без Telegram: только на основном сайте (хостинг с PHP), не в калькуляторе бота клиента.
+  const LEAD_URL = (window.APP_CONFIG && window.APP_CONFIG.leadUrl) || "";
+  const LEAD_FORM = Boolean(LEAD_URL) && !BRAND && !botParam;
+  const openedAt = Date.now();
+  let lastCalc = null;
+  if (LEAD_FORM) {
+    $("leadBox").style.display = "block";
+    $("leadLink").textContent = "Заявка в Telegram";
+  }
 
   const tg = window.Telegram && window.Telegram.WebApp;
   if (tg) { tg.ready(); tg.expand(); }
@@ -238,7 +276,52 @@
       alert("Проверьте цену, объём и мощность.");
       return;
     }
-    render(CarCalc.calculate(car, rules, EXTRAS), car);
+    const res = CarCalc.calculate(car, rules, EXTRAS);
+    render(res, car);
+    const opt = $("model").selectedOptions[0];
+    const model = opt && opt.value ? opt.textContent : `${car.engine_cc} см³, ${car.power_hp} л.с.`;
+    lastCalc = {
+      model,
+      total: Math.round(res.total_mid),
+      text: `${model}, ${$("made").value}, цена в Китае ${car.price_cny} ¥, ${$("route").selectedOptions[0].textContent}, ` +
+        `до: ${$("dest").selectedOptions[0].textContent}, под ключ ${CarCalc.formatRub(res.total_mid)}`,
+    };
+  });
+
+  $("leadForm").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const msg = $("lfMsg");
+    msg.className = "muted";
+    const phone = $("lfPhone").value.trim();
+    const digits = phone.replace(/\D/g, "");
+    if (digits.length < 10 || digits.length > 15) { msg.textContent = "Проверьте телефон: нужно 10–11 цифр, например +7 900 000-00-00."; $("lfPhone").focus(); return; }
+    if (!$("lfConsent").checked) { msg.textContent = "Отметьте согласие на обработку данных, без него заявку отправить нельзя."; return; }
+    const btn = $("lfSend");
+    btn.disabled = true;
+    msg.textContent = "Отправляем…";
+    try {
+      const r = await fetch(LEAD_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: $("lfName").value.trim(), phone, city: $("lfCity").value.trim(), when: $("lfWhen").value,
+          model: lastCalc ? lastCalc.model : "", calc: lastCalc ? lastCalc.text : "", total: lastCalc ? lastCalc.total : 0,
+          consent: true, website: $("lfWebsite").value, elapsed: Date.now() - openedAt,
+        }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok && d.ok) {
+        $("leadForm").querySelectorAll("input, select, button").forEach((el) => { el.disabled = true; });
+        msg.className = "ok";
+        msg.textContent = d.id ? `Заявка №${d.id} принята. Менеджер перезвонит в рабочее время.` : "Заявка принята. Менеджер перезвонит в рабочее время.";
+        return;
+      }
+      msg.textContent = r.status === 429 ? "Слишком много заявок с этого адреса. Попробуйте через час или напишите в Telegram."
+        : "Не получилось отправить. Попробуйте ещё раз или оставьте заявку в Telegram.";
+    } catch (e) {
+      msg.textContent = "Нет связи с сервером. Попробуйте ещё раз или оставьте заявку в Telegram.";
+    }
+    btn.disabled = false;
   });
 
   loadRules().then(loadRates).catch((e) => { $("ratesInfo").textContent = "Не удалось загрузить правила: " + e; });

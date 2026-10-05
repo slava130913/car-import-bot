@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Персональные данные</title>
+<meta name="description" content="Как калькулятор и бот «Авто из Китая под ключ» обрабатывают телефон и имя из заявки: зачем, где хранятся, сколько, как удалить.">
+<meta name="robots" content="noindex">
+<style>
+  :root { --bg: #ffffff; --fg: #15171a; --muted: #5c6670; --card: #f4f6f8; --line: #dde2e7; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg: #0f1114; --fg: #e8eaed; --muted: #9aa3ad; --card: #181b20; --line: #2a2f36; }
+  }
+  :root[data-theme="dark"] { --bg: #0f1114; --fg: #e8eaed; --muted: #9aa3ad; --card: #181b20; --line: #2a2f36; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 26px; line-height: 1.2; margin: 0 0 8px; }
+  h2 { font-size: 18px; margin: 28px 0 8px; }
+  p, li { margin: 0 0 8px; }
+  .muted { color: var(--muted); font-size: 14px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  a { color: inherit; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="muted"><a href="./">← К калькулятору</a></p>
+  <h1>Как мы обращаемся с вашими данными</h1>
+  <p class="muted">Политика обработки персональных данных калькулятора и Telegram-бота «Авто из Китая под ключ». Действует с 5 октября 2026 года.</p>
+
+  <div class="card">
+    <p><b>Коротко.</b> Телефон и имя из заявки нужны только для того, чтобы перезвонить вам по машине. Мы не продаём их, не отдаём в рекламу и не делаем рассылок. Удалим по первой просьбе.</p>
+  </div>
+
+  <h2>Кто обрабатывает данные</h2>
+  <p>Оператор: <span id="operator">владелец сервиса «Бюро ввоза»</span>. Связаться: <span id="contact"></span>.</p>
+
+  <h2>Какие данные</h2>
+  <ul>
+    <li>То, что вы сами пишете в заявке: имя, телефон, город, когда планируете покупку.</li>
+    <li>Параметры расчёта, который вы сделали перед заявкой: модель, цена, маршрут, итог.</li>
+    <li>В Telegram-боте также ваш Telegram-ID и username, если вы оставляете заявку или заказываете проверку по VIN.</li>
+    <li>Для защиты формы от спама на час сохраняется зашифрованный отпечаток IP-адреса (сам адрес не сохраняется).</li>
+  </ul>
+
+  <h2>Зачем</h2>
+  <p>Связаться с вами по заявке, уточнить машину и бюджет, подготовить предложение по подбору и доставке. Для других целей данные не используются.</p>
+
+  <h2>На каком основании</h2>
+  <p>Ваше согласие: вы отмечаете его галочкой в форме или отправляете контакт боту. Согласие можно отозвать в любой момент.</p>
+
+  <h2>Где хранятся</h2>
+  <p>Заявки с сайта записываются на сервер хостинга в России. Чтобы менеджер увидел заявку быстро, уведомление с именем и телефоном приходит ему в Telegram.</p>
+
+  <h2>Кому передаются</h2>
+  <p>Менеджеру, который ведёт заявку. Если машину будет подбирать и везти компания-партнёр, мы передадим ей контакт только после разговора с вами и с вашего согласия.</p>
+
+  <h2>Сколько хранятся</h2>
+  <p>Пока идёт работа по заявке, но не дольше 12 месяцев с её отправки. Или до отзыва согласия, если это случится раньше.</p>
+
+  <h2>Ваши права</h2>
+  <p>Вы можете узнать, какие ваши данные у нас есть, исправить их, удалить или отозвать согласие. Напишите по контактам выше: ответим и удалим в течение 10 рабочих дней.</p>
+
+  <h2>Что ещё загружает страница</h2>
+  <p>Курс валют с cbr-xml-daily.ru (данные ЦБ РФ) и скрипт Telegram для работы внутри бота. Рекламных и аналитических счётчиков на сайте нет.</p>
+</div>
+<script src="config.js"></script>
+<script>
+(function () {
+  const c = window.APP_CONFIG || {};
+  if (c.operator) document.getElementById("operator").textContent = c.operator;
+  const box = document.getElementById("contact");
+  const add = (href, text) => { const a = document.createElement("a"); a.href = href; a.textContent = text; box.appendChild(a); };
+  if (c.contactEmail) { add("mailto:" + c.contactEmail, c.contactEmail); box.appendChild(document.createTextNode(" или ")); }
+  const bot = /^[A-Za-z0-9_]{5,32}$/.test(c.botUsername || "") ? c.botUsername : "";
+  if (bot) add("https://t.me/" + bot, "@" + bot + " в Telegram");
+  else if (!c.contactEmail) box.textContent = "через форму заявки на сайте";
+})();
+</script>
+</body>
+</html>

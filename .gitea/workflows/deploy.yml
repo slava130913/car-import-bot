@@ -29,6 +29,30 @@ jobs:
         run: |
           if [ -f ci/test.sh ]; then bash ci/test.sh; else echo 'No ci/test.sh, skipping tests'; fi
 
+  # Сайт и приём заявок на хостинге reg.ru (данные в РФ). Пока хостинг не настроен, задача ничего не делает.
+  site:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        run: |
+          git init -q .
+          auth=$(printf 'x-access-token:%s' "$GIT_TOKEN" | base64 -w0)
+          git -c http.extraHeader="Authorization: Basic $auth" fetch -q --depth 1 "$GIT_SERVER/$GIT_REPO.git" "$GIT_SHA"
+          git checkout -q FETCH_HEAD
+      - name: Publish site to reg.ru
+        env:
+          REGRU_FTP_HOST: ${{ vars.REGRU_FTP_HOST }}
+          REGRU_FTP_USER: ${{ vars.REGRU_FTP_USER }}
+          REGRU_SITE_DIR: ${{ vars.REGRU_SITE_DIR }}
+          REGRU_FTP_INSECURE: ${{ vars.REGRU_FTP_INSECURE }}
+          SITE_URL: ${{ vars.SITE_URL }}
+          OPERATOR_NAME: ${{ vars.OPERATOR_NAME }}
+          CONTACT_EMAIL: ${{ vars.CONTACT_EMAIL }}
+          REGRU_FTP_PASSWORD: ${{ secrets.REGRU_FTP_PASSWORD }}
+          DEPLOY_ENV_FILE: ${{ secrets.DEPLOY_ENV_FILE }}
+        run: bash ci/site.sh
+
   deploy:
     needs: test
     runs-on: ubuntu-latest
