@@ -7,3 +7,4 @@ reports/
 .venv/
 web/config.js
 compose.override.yml
+private/
