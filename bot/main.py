@@ -34,6 +34,7 @@ from aiogram.types import (
 from calc.engine import AGE_LABELS, FUEL_LABELS, CarInput, age_category_from_date, calculate, format_rub, load_rules, render_text, util_fee
 from calc.rates import get_rates
 
+from . import faq
 from .ai import AI, AIError, build_facts
 from .db import DB
 from .texts import EXPLAIN, EXPLAIN_TITLES, GUIDE, GUIDE_TITLES
@@ -232,8 +233,11 @@ HELP_TEXT = (
     "4. Проверка по VIN: китайский отчёт (пробег, ДТП, сервисная история) с переводом на русский за 24 часа.\n\n"
     "5. Заявка на подбор: передаём проверенному агенту, он связывается с вами.\n\n"
     "6. Написать нам: вопрос уходит человеку, ответ придёт сюда же.\n\n"
-    "Можно просто прислать скриншот объявления из Китая: бот прочитает модель, цену, год и мощность и посчитает под ключ. "
-    "Или задать вопрос своими словами."
+    "Можно задать вопрос своими словами: про утильсбор, пошлину, сроки, документы или конкретную модель."
+    + (
+        " Или прислать скриншот объявления из Китая: бот прочитает модель, цену, год и мощность и посчитает под ключ."
+        if ai.enabled else ""
+    )
 )
 
 
@@ -1015,23 +1019,70 @@ async def admin_broadcast_confirm(c: CallbackQuery, state: FSMContext, bot: Bot)
     await c.message.answer(f"Разослано: {sent}, не доставлено: {failed}.")
 
 
+def _faq_reply(text: str) -> faq.FaqAnswer | None:
+    return faq.answer(text, MODELS_BY_ID, RULES["util"]["preferential"], FUEL_LABELS)
+
+
 @router.message(StateFilter(None), F.text)
 async def free_question(m: Message) -> None:
-    """Вопрос своими словами: отвечает ИИ по нашим ставкам и гиду, а если ИИ выключен, подсказываем меню."""
+    """Вопрос своими словами.
+
+    Сначала ИИ по нашим ставкам и гиду, если он включён и лимит не исчерпан. Иначе или при ошибке ИИ
+    отвечаем по ключевым словам из гида. Если и так не распознали, подсказываем меню.
+    """
     text = (m.text or "").strip()
-    if text.startswith("/") or len(text) < 6 or not ai.enabled:
+    if text.startswith("/"):
         await m.answer("Выберите действие на клавиатуре или отправьте /start. Вопрос человеку можно задать через «Написать нам».", reply_markup=MAIN_KB)
         return
     db.touch_user(m.from_user.id, m.from_user.username)
-    if not ai.allow(m.from_user.id):
+    limit_hit = False
+    if ai.enabled and len(text) >= 6:
+        if ai.allow(m.from_user.id):
+            try:
+                reply = await ai.answer(text, AI_FACTS)
+            except AIError:
+                reply = None
+            if reply:
+                await m.answer(reply + "\n\nОтвет сформирован автоматически по правилам бота. Точный расчёт: «Рассчитать под ключ».", reply_markup=MAIN_KB)
+                return
+        else:
+            limit_hit = True
+    fa = _faq_reply(text)
+    if fa:
+        kb = _ikb([[b] for b in fa.buttons]) if fa.buttons else MAIN_KB
+        await m.answer(fa.text, reply_markup=kb)
+        return
+    if limit_hit:
         await m.answer("На сегодня лимит вопросов исчерпан. Задайте вопрос человеку через «Написать нам».", reply_markup=MAIN_KB)
         return
-    try:
-        reply = await ai.answer(text, AI_FACTS)
-    except AIError:
-        await m.answer("Не получилось ответить. Задайте вопрос человеку через «Написать нам».", reply_markup=MAIN_KB)
+    await m.answer(
+        "Не нашёл ответа на этот вопрос. Выберите действие на клавиатуре, откройте «Гид по перегону» "
+        "или задайте вопрос человеку через «Написать нам».",
+        reply_markup=MAIN_KB,
+    )
+
+
+@router.callback_query(F.data == "go:check")
+async def check_start_cb(c: CallbackQuery, state: FSMContext) -> None:
+    await c.answer()
+    await state.clear()
+    await state.set_state(Check.fuel)
+    await c.message.answer("Проверим, пройдёт ли машина по льготному утильсбору. Тип двигателя:", reply_markup=FUEL_KB)
+
+
+@router.callback_query(F.data.startswith("faq:model:"))
+async def faq_model_calc(c: CallbackQuery, state: FSMContext) -> None:
+    """Кнопка «Посчитать модель» из ответа на вопрос: сразу расчёт с характеристиками модели из списка."""
+    await c.answer()
+    mdl = MODELS_BY_ID.get(c.data.split(":", 2)[2])
+    await state.clear()
+    if not mdl:
+        await state.set_state(Calc.mode)
+        await c.message.answer("Как считаем?", reply_markup=START_MODE_KB)
         return
-    await m.answer(reply + "\n\nОтвет сформирован автоматически по правилам бота. Точный расчёт: «Рассчитать под ключ».", reply_markup=MAIN_KB)
+    await state.set_data({"preset": mdl["id"], "engine_cc": mdl["cc"], "power_hp": mdl["hp"], "fuel": mdl["fuel"]})
+    note = f"\n⚠️ {mdl['note']}." if mdl.get("note") else ""
+    await _next_step(c.message, state, f"{mdl['name']}: {mdl['cc']} см³, {mdl['hp']} л.с., {FUEL_LABELS[mdl['fuel']]}.{note}\n\n")
 
 
 @router.message()
