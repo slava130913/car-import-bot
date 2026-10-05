@@ -1,4 +1,5 @@
-# Публикует папку web/ на GitHub Pages при каждом пуше в main.
+# Публикует папку web/ на GitHub Pages при каждом пуше в main. С переезда на reg.ru (docs/regru.md)
+# страницы здесь переадресуют на https://myapphub.tech/car/ (scripts/build_redirects.py).
 # После первого запуска: Settings → Pages → Source: GitHub Actions. Адрес будет https://<user>.github.io/<repo>/
 # В Settings → Secrets and variables → Actions → Variables добавьте BOT_USERNAME (username бота без @).
 name: Deploy web calculator
@@ -6,7 +7,7 @@ name: Deploy web calculator
 on:
   push:
     branches: [main]
-    paths: ["web/**", "data/rules.json", "scripts/build_web.py", ".github/workflows/pages.yml"]
+    paths: ["web/**", "data/rules.json", "scripts/build_web.py", "scripts/build_redirects.py", ".github/workflows/pages.yml"]
   workflow_dispatch:
 
 permissions:
@@ -29,6 +30,10 @@ jobs:
       - run: python scripts/build_web.py
         env:
           BOT_USERNAME: ${{ vars.BOT_USERNAME }}
+      # Основной сайт теперь на хостинге reg.ru: страницы здесь только переадресуют туда (с ?параметрами и #данными Telegram)
+      - run: python scripts/build_redirects.py
+        env:
+          REDIRECT_TO: ${{ vars.REDIRECT_TO || 'https://myapphub.tech/car' }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: web

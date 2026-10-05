@@ -304,3 +304,27 @@ def test_old_lead_contacts_are_erased_after_a_year(env):
     r = bm.db.get_lead(old, bm.MAIN)
     assert "900" not in r["contact"] and r["username"] is None and r["user_id"] == 0 and r["model"] == "Jolion"
     assert bm.db.get_lead(new, bm.MAIN)["contact"] == "+7 900 222-33-44"
+
+
+def test_pages_redirect_stubs_keep_path_query_and_hash(tmp_path, monkeypatch):
+    spec = importlib.util.spec_from_file_location("build_redirects", ROOT / "scripts" / "build_redirects.py")
+    br = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(br)
+    web_copy = tmp_path / "web"
+    (web_copy / "auto").mkdir(parents=True)
+    (web_copy / "index.html").write_text("old", encoding="utf-8")
+    (web_copy / "auto" / "index.html").write_text("old", encoding="utf-8")
+    (web_copy / "auto" / "camry.html").write_text("old", encoding="utf-8")
+    (web_copy / "sitemap.xml").write_text("x", encoding="utf-8")
+    (web_copy / "calc.js").write_text("js", encoding="utf-8")
+    monkeypatch.setattr(br, "WEB", web_copy)
+    monkeypatch.setenv("REDIRECT_TO", "https://myapphub.tech/car/")
+    assert br.main() == 0
+    root = (web_copy / "index.html").read_text(encoding="utf-8")
+    assert 'href="https://myapphub.tech/car/"' in root and "location.search + location.hash" in root
+    assert "'https://myapphub.tech/car/auto/'" in (web_copy / "auto" / "index.html").read_text(encoding="utf-8")
+    assert "https://myapphub.tech/car/auto/camry.html" in (web_copy / "auto" / "camry.html").read_text(encoding="utf-8")
+    assert not (web_copy / "sitemap.xml").exists() and (web_copy / "calc.js").read_text(encoding="utf-8") == "js"
+    monkeypatch.setenv("REDIRECT_TO", "")
+    (web_copy / "index.html").write_text("keep", encoding="utf-8")
+    assert br.main() == 0 and (web_copy / "index.html").read_text(encoding="utf-8") == "keep"
