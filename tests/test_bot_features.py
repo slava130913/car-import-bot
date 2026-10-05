@@ -128,7 +128,7 @@ def test_preset_flow_skips_specs_and_offers_routes(env):
 
     m = run(flow())
     out = m.outbox[-1]["text"]
-    assert "по всем маршрутам" in out and "← ваш выбор" in out
+    assert "все маршруты" in out and "← ваш выбор" in out
     assert out.count("•") == 4
 
 
@@ -251,3 +251,34 @@ def test_non_admin_cannot_export_or_broadcast(env):
 
     exp, bc = run(flow())
     assert exp.outbox == [] and bc.outbox == []
+
+
+def test_check_texts_have_no_double_dot_and_ev_limit_in_advice(env):
+    state, fbot = env
+
+    async def flow():
+        m = Msg(text=bm.BTN_CHECK)
+        await bm.check_start(m, state)
+        await bm.check_fuel(Cb("fuel:ev", m), state)
+        await bm.check_hp(Msg(text="120", outbox=m.outbox), state)
+        return m.outbox[-1]["text"]
+
+    out = run(flow())
+    assert ".." not in out and "до 80 л.с." in out
+
+
+def test_explain_has_titles(env):
+    state, fbot = env
+    m = Msg()
+    run(bm.explain_lines(Cb("go:explain", m)))
+    out = texts(m)
+    assert "• Утилизационный сбор. " in out and "• СВХ. " in out
+
+
+def test_fix_mojibake_repairs_cp1251_garbled_utf8_and_keeps_normal_text():
+    good = "Мы свяжемся с вами для оплаты и пришлём отчёт в течение 24 часов."
+    garbled = good.encode("utf-8").decode("cp1251", errors="replace")
+    assert bm.fix_mojibake(garbled) == good
+    assert bm.fix_mojibake(good) == good
+    assert bm.fix_mojibake("Pay via SBP") == "Pay via SBP"
+    assert bm.fix_mojibake("") == ""

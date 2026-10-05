@@ -34,7 +34,7 @@ from calc.engine import AGE_LABELS, FUEL_LABELS, CarInput, age_category_from_dat
 from calc.rates import get_rates
 
 from .db import DB
-from .texts import EXPLAIN, GUIDE, GUIDE_TITLES
+from .texts import EXPLAIN, EXPLAIN_TITLES, GUIDE, GUIDE_TITLES
 
 try:  # .env необязателен
     from dotenv import load_dotenv
@@ -46,13 +46,24 @@ except ImportError:  # pragma: no cover
 log = logging.getLogger("bot")
 
 ROOT = Path(__file__).resolve().parent.parent
+def fix_mojibake(s: str) -> str:
+    """Чинит UTF-8, прочитанный как cp1251 (так портит кириллицу запись .env без кодировки на Windows)."""
+    if not s or not re.search(r"[РС][Ѐ-ӿ‘-›\u0080-ÿ]", s):
+        return s
+    try:
+        fixed = s.encode("cp1251").decode("utf-8")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return s
+    return fixed if re.search(r"[а-яё]", fixed, re.I) else s
+
+
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 ADMIN_IDS = {int(x) for x in os.environ.get("ADMIN_IDS", "").replace(" ", "").split(",") if x}
 VIN_PRICE_STARS = int(os.environ.get("VIN_PRICE_STARS", "0"))
-PAYMENT_INSTRUCTIONS = os.environ.get(
+PAYMENT_INSTRUCTIONS = fix_mojibake(os.environ.get(
     "PAYMENT_INSTRUCTIONS",
     "Мы свяжемся с вами для оплаты и пришлём отчёт в течение 24 часов.",
-)
+))
 DB_PATH = os.environ.get("DB_PATH", str(ROOT / "data" / "bot.sqlite3"))
 WEB_URL = os.environ.get("WEB_URL", "")
 
@@ -479,7 +490,7 @@ async def compare_routes(c: CallbackQuery) -> None:
         lines.append(f"• {info['label']}: {format_rub(r.total_mid)}, {info['days']} дней{mark}")
     dest = RULES["costs"]["domestic"].get(last["destination"], {}).get("label", "")
     await c.message.answer(
-        f"Та же машина, доставка в {dest}, по всем маршрутам:\n\n" + "\n".join(lines) +
+        f"Та же машина, все маршруты (доставка по России: {dest}):\n\n" + "\n".join(lines) +
         "\n\nРазница в основном в логистике. Сроки зависят от очереди на границе и расписания судов.",
         reply_markup=MAIN_KB,
     )
@@ -488,7 +499,7 @@ async def compare_routes(c: CallbackQuery) -> None:
 @router.callback_query(F.data == "go:explain")
 async def explain_lines(c: CallbackQuery) -> None:
     await c.answer()
-    text = "Что это за статьи расчёта:\n\n" + "\n\n".join(f"• {EXPLAIN[k]}" for k in EXPLAIN)
+    text = "Что это за статьи расчёта:\n\n" + "\n\n".join(f"• {EXPLAIN_TITLES[k]}. {EXPLAIN[k]}" for k in EXPLAIN)
     await c.message.answer(text, reply_markup=MAIN_KB)
 
 
@@ -561,8 +572,8 @@ async def check_hp(m: Message, state: FSMContext) -> None:
         why = "; ".join(reasons) or new_note
         amounts = (f"Коммерческий утильсбор: {format_rub(new_amt)} за машину до 3 лет, {format_rub(old_amt)} старше 3 лет."
                    if new_amt is not None else "Ставка для этой комбинации объёма и мощности не подтверждена, уточните у брокера.")
-        tail = "Совет: ищите версию той же модели с мощностью до 160 л.с. или считайте полную стоимость в калькуляторе."
-    await m.answer(f"{verdict}: {why}.\n{amounts}\n{tail}", reply_markup=MAIN_KB)
+        tail = f"Совет: ищите версию той же модели с мощностью до {limit} л.с. или считайте полную стоимость в калькуляторе."
+    await m.answer(f"{verdict}: {why.rstrip('.')}.\n{amounts}\n{tail}", reply_markup=MAIN_KB)
 
 
 # ---------- проверка по VIN ----------
