@@ -125,8 +125,13 @@ class SessionReuseFTP(ftplib.FTP_TLS):
         return conn, size
 
 
+CHAIN = ROOT / "scripts" / "certs" / "regru-ftp-chain.pem"
+
+
 def connect(host: str, user: str, password: str) -> ftplib.FTP_TLS:
     ctx = ssl.create_default_context()
+    # Сервер reg.ru не отдаёт промежуточный сертификат: добавляем его сами, проверка остаётся полной
+    ctx.load_verify_locations(cafile=str(CHAIN))
     if os.environ.get("REGRU_FTP_INSECURE") == "1":
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
@@ -199,7 +204,8 @@ def main() -> int:
         try:
             ftp = connect(host, user, password)
         except ssl.SSLError as e:
-            print(f"::error::TLS с {host} не установился: {e}. Если сертификат на другое имя, задайте REGRU_FTP_INSECURE=1.")
+            print(f"::error::TLS с {host} не установился: {e}. Если reg.ru сменил сертификат, обновите scripts/certs/regru-ftp-chain.pem "
+                  "(промежуточный сертификат из цепочки сервера).")
             return 1
         except ftplib.error_perm as e:
             print(f"::error::FTP отказал во входе: {e}. Проверьте логин и пароль FTP в панели reg.ru.")
