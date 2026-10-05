@@ -1,12 +1,13 @@
 # Сервер с общим Caddy (studio-myapphub-1): сайт подключается к сети Caddy под именем car-web, портов на хосте не открывает.
 # Ставится деплоем: DEPLOY_BUILD = cp deploy/compose.override.shared-network.yml compose.override.yml
 # В Caddyfile общего Caddy:  car.myapphub.tech { reverse_proxy car-web:80 }
+# Копия бота для клиента задаёт в своём .env WEB_ALIAS (например client1-web) и COMPOSE_PROJECT_NAME.
 services:
   web:
     networks:
       default:
       edge:
-        aliases: [car-web]
+        aliases: ["${WEB_ALIAS:-car-web}"]
 
 networks:
   edge:

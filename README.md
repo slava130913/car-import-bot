@@ -85,6 +85,11 @@ python -m pytest -q
 3. Запустите `python scripts/export_rules.py` и перевыложите `web/`.
 4. Перезапустите бота.
 
+## Продажи и копии для клиентов
+
+Комплект продаж (оффер, тексты, демо, мануал): https://claude.ai/artifact/Aa2tZ6JYqT3CmX6pwLPeFJ  
+Как запустить копию бота под брендом клиента: [docs/white-label.md](docs/white-label.md).
+
 ## Отчёт по VIN вручную
 
 1. Заказ приходит админу с VIN и контактом.
