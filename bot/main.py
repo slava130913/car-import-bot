@@ -80,7 +80,7 @@ MANAGER_CONTACT = fix_mojibake(os.environ.get("MANAGER_CONTACT", "").strip())
 
 TRIAL_DAYS = int(os.environ.get("TRIAL_DAYS", "7"))
 # Заявки с формы на сайте (хостинг reg.ru): бот забирает их отсюда раз в минуту. Пустое значение выключает.
-SITE_LEADS_URL = os.environ.get("SITE_LEADS_URL", "https://car.myapphub.tech/api/leads.php").strip()
+SITE_LEADS_URL = os.environ.get("SITE_LEADS_URL", "https://myapphub.tech/car/api/leads.php").strip()
 SITE_LEADS_INTERVAL = 60
 # Контакт платформы для клиентов: куда писать об оплате и вопросах по их боту
 # Режим платформы: самостоятельный запуск ботов клиентов и команды /tenants. В отдельном экземпляре для клиента
@@ -1650,8 +1650,11 @@ async def check_billing(bot: Bot) -> None:
                                  f"Продлили: /tenant_on {row['id']} 30, отключить: /tenant_off {row['id']}", admins=ADMIN_IDS)
 
 
-async def ingest_site_leads(bot: Bot, leads: list[dict]) -> int:
-    """Новые заявки с сайта: в базу основного бота и менеджерам с кнопками статуса. Возвращает число новых."""
+async def ingest_site_leads(bot: Bot, leads: list[dict], epoch: str = "") -> int:
+    """Новые заявки с сайта: в базу основного бота и менеджерам с кнопками статуса. Возвращает число доставленных.
+
+    Номер заявки на сайте сдвигается только после того, как карточку получил хотя бы один менеджер: иначе заявка
+    придёт при следующем опросе. В базу она при этом попадает один раз (site_ref = epoch:номер)."""
     after = int(db.get_meta("site_leads_after", "0") or 0)
     added = 0
     for sl in sorted(leads, key=lambda x: x["id"]):
@@ -1666,14 +1669,21 @@ async def ingest_site_leads(bot: Bot, leads: list[dict]) -> int:
         city = str(sl.get("city") or "").strip()[:60] or "не указан"
         when = sl.get("when") if sl.get("when") in TIMELINES else None
         summary = str(sl.get("calc") or "").strip()[:400] or None
+        ref = f"{epoch}:{sl['id']}"
         with tn.use(_main_tenant()):
-            lead_id = db.add_lead(0, None, model, budget, city, contact, tenant_id=MAIN, timeline=when,
-                                  calc_summary=summary, source="site")
-            await notify_admins(bot, _lead_card(lead_id, {"model": model, "budget": budget, "city": city, "timeline": when},
-                                                contact, None, 0, summary), reply_markup=lead_status_kb(lead_id))
+            row = db.lead_by_site_ref(ref)
+            lead_id = row["id"] if row is not None else db.add_lead(
+                0, None, model, budget, city, contact, tenant_id=MAIN, timeline=when, calc_summary=summary,
+                source="site", site_ref=ref)
+            sent = await notify_admins(bot, _lead_card(lead_id, {"model": model, "budget": budget, "city": city, "timeline": when},
+                                                       contact, None, 0, summary), reply_markup=lead_status_kb(lead_id))
+        if not sent:
+            log.warning("site leads: заявку #%d с сайта (#%d в боте) не доставили ни одному менеджеру, повторю", sl["id"], lead_id)
+            break
         after = sl["id"]
         db.set_meta("site_leads_after", str(after))
         added += 1
+        await asyncio.sleep(0.1)  # пачка заявок не упрётся в лимит Telegram на частоту сообщений
     return added
 
 
@@ -1682,23 +1692,29 @@ async def site_leads_watch(bot: Bot) -> None:
     if not SITE_LEADS_URL or not BOT_TOKEN:
         return
     token = site_token(BOT_TOKEN)
-    warned_at = 0.0
+    warned_at: float | None = None
     async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as session:
         while True:
             try:
                 after = int(db.get_meta("site_leads_after", "0") or 0)
-                leads, last = await fetch_leads(session, SITE_LEADS_URL, token, after)
-                if last < after:
-                    log.warning("site leads: на сайте последняя заявка #%d, у бота #%d; файл заявок начат заново", last, after)
+                leads, last, epoch = await fetch_leads(session, SITE_LEADS_URL, token, after)
+                known = db.get_meta("site_leads_epoch", "")
+                if epoch != known:
+                    # Счётчик номеров на сайте создан заново (или это первая заявка): начинаем с нуля.
+                    # Повторно полученные заявки не задвоятся: у каждой свой site_ref.
+                    if known:
+                        log.warning("site leads: нумерация заявок на сайте начата заново (%s -> %s)", known, epoch)
+                    db.set_meta("site_leads_epoch", epoch)
                     db.set_meta("site_leads_after", "0")
-                    continue
-                n = await ingest_site_leads(bot, leads)
+                    if after:
+                        continue
+                n = await ingest_site_leads(bot, leads, epoch)
                 if n:
                     log.info("site leads: %d new", n)
-                    if len(leads) >= 100:
+                    if n == len(leads) and len(leads) >= 100:
                         continue
             except Exception as e:  # noqa: BLE001
-                if time.monotonic() - warned_at > 3600:
+                if warned_at is None or time.monotonic() - warned_at > 3600:
                     log.warning("site leads: %s", e)
                     warned_at = time.monotonic()
             await asyncio.sleep(SITE_LEADS_INTERVAL)
@@ -1710,6 +1726,11 @@ async def trial_watch(bot: Bot) -> None:
             await check_billing(bot)
         except Exception:  # noqa: BLE001
             log.exception("billing check failed")
+        try:
+            if n := db.anonymize_old_leads(days=365):
+                log.info("anonymized %d leads older than 12 months", n)
+        except Exception:  # noqa: BLE001
+            log.exception("lead anonymization failed")
         await asyncio.sleep(3600)
 
 

@@ -18,27 +18,25 @@
   и удаляет файлы, которые сам выкладывал раньше. Папку `api/data` не трогает.
 - Задача `site` в `.gitea/workflows/deploy.yml` (скрипт `ci/site.sh`) запускается при каждом пуше в main. Пока хостинг
   не настроен, она ничего не делает.
-- В боте `SITE_LEADS_URL` по умолчанию `https://car.myapphub.tech/api/leads.php`. Пока сайта нет, бот раз в час пишет
+- В боте `SITE_LEADS_URL` по умолчанию `https://myapphub.tech/car/api/leads.php`. Пока сайта нет, бот раз в час пишет
   в журнал, что адрес недоступен, и больше ничего не делает.
 
-## Что сделать в панели reg.ru (один раз, около 15 минут)
+## Адрес: https://myapphub.tech/car/
 
-1. **Сайт.** Хостинг → Панель управления (ISPmanager) → Сайты → Создать сайт: имя `car.myapphub.tech`, PHP включён
-   (режим «Модуль Apache» или «CGI», версия 8.x). Папка сайта будет `www/car.myapphub.tech`.
-2. **DNS.** Домены → myapphub.tech → DNS-серверы и управление зоной → добавить A-запись: имя `car`,
-   значение `31.31.197.49` (IP хостинга). Если сейчас стоит A-запись `car` на другой IP, замените её.
-3. **SSL.** Через 10–30 минут, когда домен откроется: панель хостинга → SSL-сертификаты → бесплатный Let's Encrypt
-   для `car.myapphub.tech`, включить перенаправление HTTP → HTTPS. Без HTTPS Telegram не откроет калькулятор в боте.
-4. **Пароль FTP.** Панель хостинга → FTP-пользователи (или «Доступы»): пароль пользователя `u3639514`.
-   Если не помните, задайте новый.
+На тарифе Host-0 занято 7 сайтов из 7, поэтому калькулятор лежит в папке `car` уже работающего сайта `myapphub.tech`:
+домен смотрит на хостинг, SSL есть, новая DNS-запись не нужна. Папку `www/myapphub.tech/car` выкладка создаёт сама.
+Корень `myapphub.tech` закрыт от поиска заголовком `X-Robots-Tag`; `web/.htaccess` снимает его для `/car/`.
 
-## Что сделать в Gitea (один раз)
+Если позже понадобится отдельный адрес `car.myapphub.tech`: освободить место под сайт (или сменить тариф), создать сайт
+в ispmanager, добавить A-запись `car` → `31.31.197.49`, выпустить Let's Encrypt и поменять переменные
+`REGRU_SITE_DIR` и `SITE_URL`.
 
-https://git.myapphub.tech/myapphub/car-import-bot → Settings → Actions → **Secrets** → Add secret:
+## Что нужно один раз
 
-| Имя | Значение |
-|---|---|
-| `REGRU_FTP_PASSWORD` | пароль FTP из шага 4 |
+Выкладке нужен пароль хостинга (2 минуты). reg.ru → Хостинг Host-0 → вкладка «Доступы» → «Доступ в панель управления, SSH, SFTP»:
+пароль пользователя `u3639514` (если не помните, «Сбросить пароль»). Затем
+https://git.myapphub.tech/myapphub/car-import-bot → Settings → Actions → **Secrets** → Add secret
+`REGRU_FTP_PASSWORD` с этим паролем.
 
 Переменные (Settings → Actions → **Variables**) уже заданы:
 
@@ -46,8 +44,8 @@ https://git.myapphub.tech/myapphub/car-import-bot → Settings → Actions → *
 |---|---|
 | `REGRU_FTP_HOST` | `server298.hosting.reg.ru` |
 | `REGRU_FTP_USER` | `u3639514` |
-| `REGRU_SITE_DIR` | `www/car.myapphub.tech` |
-| `SITE_URL` | `https://car.myapphub.tech` |
+| `REGRU_SITE_DIR` | `www/myapphub.tech/car` |
+| `SITE_URL` | `https://myapphub.tech/car` |
 
 Необязательные переменные: `OPERATOR_NAME` (ФИО или название оператора персональных данных для `privacy.html`,
 например после регистрации самозанятым), `CONTACT_EMAIL` (почта для запросов об удалении данных),
@@ -58,7 +56,9 @@ https://git.myapphub.tech/myapphub/car-import-bot → Settings → Actions → *
 
 ## После того как сайт заработал
 
-- Кнопка меню бота: в секрете `DEPLOY_ENV_FILE` поменять `WEB_URL` на `https://car.myapphub.tech/`.
+- Кнопка меню бота: в секрете `DEPLOY_ENV_FILE` поменять `WEB_URL` на `https://myapphub.tech/car/`.
 - GitHub Pages заменить переадресацией на новый адрес, чтобы у поисковиков не было двух копий сайта.
-- Роскомнадзор: подать уведомление об обработке персональных данных (pd.rkn.gov.ru), в нём указать хостинг в РФ
-  и передачу уведомлений менеджеру через Telegram.
+- Роскомнадзор: подать уведомление об обработке персональных данных (pd.rkn.gov.ru). Указать: первичная запись
+  заявок с сайта на хостинге reg.ru в РФ; трансграничная передача в Нидерланды (сервер бота DigitalOcean, Амстердам)
+  и через Telegram; срок хранения 12 месяцев (на хостинге заявки старше года удаляются при опросе ботом, в базе бота
+  имя, телефон и аккаунт стираются автоматически).

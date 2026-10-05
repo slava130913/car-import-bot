@@ -68,6 +68,9 @@ def test_plan_uploads_changes_and_removes_only_own_stale_files():
 def test_stage_puts_api_and_config_with_token(tmp_path):
     dr.stage(tmp_path / "s", "123456:" + "B" * 35)
     s = tmp_path / "s"
+    # .htaccess в корне снимает noindex технического домена myapphub.tech для /car/
+    assert "unset X-Robots-Tag" in (s / ".htaccess").read_text(encoding="utf-8")
+    assert ".htaccess" in dr.manifest_of(s)
     assert (s / "index.html").is_file() and (s / "privacy.html").is_file()
     assert (s / "api" / "lead.php").is_file() and (s / "api" / "leads.php").is_file()
     cfg = (s / "api" / "config.php").read_text(encoding="utf-8")
@@ -90,6 +93,39 @@ def test_sync_uploads_only_changes(tmp_path):
     (base / "gone.html").unlink()
     assert dr.sync(ftp, base) == (1, 1)
     assert ftp.files["index.html"] == b"v2" and "gone.html" not in ftp.files
+
+
+class DirFTP:
+    """Только переходы по папкам: какие есть на хостинге и какие создал скрипт."""
+
+    def __init__(self, dirs: set[str]) -> None:
+        self.dirs, self.cur, self.made = set(dirs), "", []
+
+    def _abs(self, d: str) -> str:
+        return f"{self.cur}/{d}".strip("/") if self.cur else d
+
+    def cwd(self, d: str) -> None:
+        if self._abs(d) not in self.dirs:
+            raise ftplib.error_perm("550 no such dir")
+        self.cur = self._abs(d)
+
+    def mkd(self, d: str) -> None:
+        self.dirs.add(self._abs(d))
+        self.made.append(self._abs(d))
+
+
+def test_open_site_dir_creates_subfolder_only_inside_existing_site():
+    ftp = DirFTP({"www", "www/myapphub.tech"})
+    assert dr.open_site_dir(ftp, "www/myapphub.tech/car") and ftp.cur == "www/myapphub.tech/car"
+    assert ftp.made == ["www/myapphub.tech/car"]
+    # Новый сайт www/<домен> скрипт не создаёт: домен на такую папку смотреть не будет
+    ftp = DirFTP({"www"})
+    assert not dr.open_site_dir(ftp, "www/car.myapphub.tech") and ftp.made == []
+    # Сайта-родителя нет: тоже ничего не создаём
+    ftp = DirFTP({"www"})
+    assert not dr.open_site_dir(ftp, "www/nosuch.tech/car") and ftp.made == []
+    ftp = DirFTP({"www", "www/myapphub.tech", "www/myapphub.tech/car"})
+    assert dr.open_site_dir(ftp, "www/myapphub.tech/car") and ftp.made == []
 
 
 def test_deploy_skips_without_hosting_settings(monkeypatch):
@@ -148,7 +184,7 @@ def test_fetch_leads_sends_token_and_reads_reply():
         seen["after"] = request.query.get("after")
         if request.headers.get("X-Token") != token:
             return web.json_response({"ok": False}, status=403)
-        return web.json_response({"ok": True, "leads": [_site_lead(4), {"id": "x"}, {"id": 0}], "last": 4})
+        return web.json_response({"ok": True, "leads": [_site_lead(4), {"id": "x"}, {"id": 0}], "last": 4, "epoch": "ab12"})
 
     async def scenario():
         app = web.Application()
@@ -161,7 +197,7 @@ def test_fetch_leads_sends_token_and_reads_reply():
         url = f"http://127.0.0.1:{port}/api/leads.php"
         try:
             async with aiohttp.ClientSession() as s:
-                leads, last = await fetch_leads(s, url, token, 3)
+                leads, last, epoch = await fetch_leads(s, url, token, 3)
                 try:
                     await fetch_leads(s, url, "wrong", 3)
                     raise AssertionError("ожидали ошибку")
@@ -169,8 +205,57 @@ def test_fetch_leads_sends_token_and_reads_reply():
                     assert "403" in str(e)
         finally:
             await runner.cleanup()
-        return leads, last
+        return leads, last, epoch
 
-    leads, last = asyncio.run(scenario())
-    assert [x["id"] for x in leads] == [4] and last == 4
+    leads, last, epoch = asyncio.run(scenario())
+    assert [x["id"] for x in leads] == [4] and last == 4 and epoch == "ab12"
     assert seen["after"] == "3"
+
+
+class FlakyBot(FakeBot):
+    """Telegram недоступен: сообщения не уходят."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.fail = True
+
+    async def send_message(self, chat_id, text, **kw):
+        if self.fail:
+            raise RuntimeError("telegram down")
+        await super().send_message(chat_id, text, **kw)
+
+
+def test_undelivered_site_lead_is_retried_without_duplicate_row(env):
+    bot = FlakyBot()
+    assert asyncio.run(bm.ingest_site_leads(bot, [_site_lead(1), _site_lead(2)], "e1")) == 0
+    assert bm.db.get_meta("site_leads_after", "0") == "0"  # номер не сдвинулся: заявка придёт снова
+    assert len(bm.db.list_leads(tenant_id=bm.MAIN)) == 1  # вторую не трогали, пока первая не доставлена
+    bot.fail = False
+    assert asyncio.run(bm.ingest_site_leads(bot, [_site_lead(1), _site_lead(2)], "e1")) == 2
+    rows = bm.db.list_leads(tenant_id=bm.MAIN)
+    assert len(rows) == 2 and {r["site_ref"] for r in rows} == {"e1:1", "e1:2"}
+    assert len(bot.sent) == 2 and bm.db.get_meta("site_leads_after") == "2"
+
+
+def test_replay_after_epoch_reset_does_not_duplicate(env):
+    bot = FakeBot()
+    asyncio.run(bm.ingest_site_leads(bot, [_site_lead(1), _site_lead(2)], "e1"))
+    bm.db.set_meta("site_leads_after", "0")  # бот начал с нуля, сайт отдал те же заявки ещё раз
+    asyncio.run(bm.ingest_site_leads(bot, [_site_lead(1), _site_lead(2)], "e1"))
+    assert len(bm.db.list_leads(tenant_id=bm.MAIN)) == 2
+    # Новый счётчик на сайте: номер 1 снова свободен, но это другая заявка
+    bm.db.set_meta("site_leads_after", "0")
+    asyncio.run(bm.ingest_site_leads(bot, [_site_lead(1, phone="+7 900 999-99-99")], "e2"))
+    assert len(bm.db.list_leads(tenant_id=bm.MAIN)) == 3
+
+
+def test_old_lead_contacts_are_erased_after_a_year(env):
+    old = bm.db.add_lead(77, "ivan", "Jolion", "2 млн", "Тула", "+7 900 111-22-33")
+    new = bm.db.add_lead(78, "petr", "Jolion", "2 млн", "Тула", "+7 900 222-33-44")
+    bm.db.conn.execute("UPDATE leads SET created_at='2020-01-01T00:00:00+00:00' WHERE id=?", (old,))
+    bm.db.conn.commit()
+    assert bm.db.anonymize_old_leads(days=365) == 1
+    assert bm.db.anonymize_old_leads(days=365) == 0
+    r = bm.db.get_lead(old, bm.MAIN)
+    assert "900" not in r["contact"] and r["username"] is None and r["user_id"] == 0 and r["model"] == "Jolion"
+    assert bm.db.get_lead(new, bm.MAIN)["contact"] == "+7 900 222-33-44"

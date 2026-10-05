@@ -105,6 +105,7 @@ MIGRATIONS = [
     ("support", "tenant_id", f"TEXT NOT NULL DEFAULT '{MAIN}'"),
     ("tenants", "reminder_sent", "INTEGER NOT NULL DEFAULT 0"),
     ("leads", "source", "TEXT"),
+    ("leads", "site_ref", "TEXT"),
 ]
 
 LEAD_STATUSES = {"new": "🆕 Новая", "work": "🟡 В работе", "won": "✅ Сделка", "lost": "❌ Отказ"}
@@ -132,6 +133,8 @@ class DB:
             cols = {r["name"] for r in self.conn.execute(f"PRAGMA table_info({table})")}
             if col not in cols:
                 self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
+        # Заявка с сайта попадает в базу один раз, даже если бот заберёт её повторно
+        self.conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS leads_site_ref ON leads(site_ref) WHERE site_ref IS NOT NULL")
         self.conn.commit()
 
     # meta: служебные значения (например, номер последней заявки, забранной с сайта)
@@ -236,14 +239,29 @@ class DB:
     # leads
     def add_lead(self, user_id: int, username: str | None, model: str, budget: str, city: str, contact: str,
                  tenant_id: str = MAIN, timeline: str | None = None, calc_summary: str | None = None,
-                 source: str | None = None) -> int:
+                 source: str | None = None, site_ref: str | None = None) -> int:
         cur = self.conn.execute(
             "INSERT INTO leads(user_id, username, model, budget, city, contact, created_at, tenant_id, timeline, calc_summary, "
-            "source) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-            (user_id, username, model, budget, city, contact, _now(), tenant_id, timeline, calc_summary, source),
+            "source, site_ref) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+            (user_id, username, model, budget, city, contact, _now(), tenant_id, timeline, calc_summary, source, site_ref),
         )
         self.conn.commit()
         return int(cur.lastrowid)
+
+    def lead_by_site_ref(self, site_ref: str) -> sqlite3.Row | None:
+        return self.conn.execute("SELECT * FROM leads WHERE site_ref=?", (site_ref,)).fetchone()
+
+    def anonymize_old_leads(self, days: int = 365, tenant_id: str = MAIN) -> int:
+        """Политика: контакты из заявок хранятся не дольше 12 месяцев. Строку оставляем для отчёта /report,
+        а имя, телефон и Telegram-аккаунт стираем."""
+        since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
+        cur = self.conn.execute(
+            "UPDATE leads SET contact='(удалён через 12 мес.)', username=NULL, user_id=0 "
+            "WHERE tenant_id=? AND created_at<? AND contact IS NOT '(удалён через 12 мес.)'",
+            (tenant_id, since),
+        )
+        self.conn.commit()
+        return cur.rowcount
 
     def get_lead(self, lead_id: int, tenant_id: str) -> sqlite3.Row | None:
         return self.conn.execute("SELECT * FROM leads WHERE id=? AND tenant_id=?", (lead_id, tenant_id)).fetchone()

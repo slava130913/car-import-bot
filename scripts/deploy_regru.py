@@ -5,7 +5,7 @@
   REGRU_FTP_HOST      сервер хостинга, например server298.hosting.reg.ru
   REGRU_FTP_USER      логин FTP (u3639514)
   REGRU_FTP_PASSWORD  пароль FTP (секрет)
-  REGRU_SITE_DIR      папка сайта от корня FTP, например www/car.myapphub.tech
+  REGRU_SITE_DIR      папка сайта от корня FTP, например www/myapphub.tech/car
   BOT_TOKEN           из него считается токен, по которому бот забирает заявки (тот же считает бот)
   SITE_URL            адрес сайта для проверки после выкладки
   REGRU_FTP_INSECURE  1, если сертификат FTP-сервера не проходит проверку
@@ -136,6 +136,30 @@ def connect(host: str, user: str, password: str) -> ftplib.FTP_TLS:
     return ftp
 
 
+def open_site_dir(ftp: ftplib.FTP, site_dir: str) -> bool:
+    """Переходит в папку сайта. Подпапку внутри существующего сайта (www/myapphub.tech/car) создаёт сама,
+    новый сайт (www/<домен>) не создаёт: его заводят в панели, иначе домен не будет на него смотреть."""
+    try:
+        ftp.cwd(site_dir)
+        return True
+    except ftplib.error_perm:
+        pass
+    parent, _, leaf = site_dir.rpartition("/")
+    if parent.count("/") < 1:  # родитель www или корень: это был бы новый сайт
+        return False
+    try:
+        ftp.cwd(parent)
+    except ftplib.error_perm:
+        return False
+    try:
+        ftp.mkd(leaf)
+        ftp.cwd(leaf)
+    except ftplib.error_perm:
+        return False
+    print(f"Создана папка {site_dir}")
+    return True
+
+
 def check_site(url: str) -> None:
     """После выкладки: страница открывается, PHP работает (GET на приём заявок отвечает 405)."""
     url = url.rstrip("/")
@@ -164,7 +188,7 @@ def main() -> int:
         print("Хостинг reg.ru не настроен (нет REGRU_FTP_HOST, REGRU_FTP_USER или секрета REGRU_FTP_PASSWORD), сайт не выкладываю.")
         return 0
     if not site_dir:
-        print("::error::Не задана REGRU_SITE_DIR, например www/car.myapphub.tech")
+        print("::error::Не задана REGRU_SITE_DIR, например www/myapphub.tech/car")
         return 1
     bot_token = os.environ.get("BOT_TOKEN", "").strip()
     if not bot_token:
@@ -184,10 +208,8 @@ def main() -> int:
             print(f"::error::Нет связи с {host}:21: {e}. Проверьте имя сервера и не закрыт ли FTP по IP в панели reg.ru.")
             return 1
         with ftp:
-            try:
-                ftp.cwd(site_dir)
-            except ftplib.error_perm:
-                print(f"::error::На хостинге нет папки {site_dir}. Создайте сайт в панели reg.ru (ISPmanager → Сайты).")
+            if not open_site_dir(ftp, site_dir):
+                print(f"::error::На хостинге нет папки {site_dir}. Создайте сайт в панели reg.ru (ispmanager → Сайты).")
                 return 1
             up, rm = sync(ftp, base)
         print(f"reg.ru: загружено {up}, удалено {rm}, папка {site_dir}")

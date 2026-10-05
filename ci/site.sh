@@ -24,7 +24,7 @@ env_value() { env_file | tr -d '\r' | sed -n "s/^$1=//p" | tail -n 1 | sed "s/^[
 
 BOT_TOKEN=$(env_value BOT_TOKEN)
 BOT_USERNAME=${BOT_USERNAME:-$(env_value BOT_USERNAME)}
-SITE_URL=${SITE_URL:-https://car.myapphub.tech}
+SITE_URL=${SITE_URL:-https://myapphub.tech/car}
 export BOT_TOKEN BOT_USERNAME SITE_URL
 
 python3 scripts/build_web.py

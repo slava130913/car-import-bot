@@ -1,0 +1,7 @@
+# Хостинг reg.ru: сайт лежит в папке /car/ технического домена myapphub.tech, корень которого закрыт от поиска
+# заголовком X-Robots-Tag. Калькулятор и гид должны индексироваться, поэтому здесь заголовок снимаем.
+# На GitHub Pages файл ни на что не влияет.
+<IfModule mod_headers.c>
+  Header unset X-Robots-Tag
+  Header always unset X-Robots-Tag
+</IfModule>

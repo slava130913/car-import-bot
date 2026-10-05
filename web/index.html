@@ -120,7 +120,7 @@
           </select></div>
       </div>
       <div class="hp" aria-hidden="true"><label for="lfWebsite">Сайт</label><input id="lfWebsite" tabindex="-1" autocomplete="off"></div>
-      <label class="check"><input id="lfConsent" type="checkbox"> <span>Согласен на обработку телефона и имени для связи по заявке (<a href="privacy.html" target="_blank" rel="noopener">политика</a>)</span></label>
+      <label class="check"><input id="lfConsent" type="checkbox"> <span>Согласен на обработку телефона и имени для связи по заявке, в том числе на передачу менеджеру через Telegram и в базу бота за рубежом (<a href="privacy.html" target="_blank" rel="noopener">политика</a>)</span></label>
       <button type="submit" id="lfSend">Отправить заявку</button>
       <div id="lfMsg" class="muted" role="status"></div>
     </form>
@@ -299,17 +299,23 @@
     const btn = $("lfSend");
     btn.disabled = true;
     msg.textContent = "Отправляем…";
+    const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
+    const send = () => fetch(LEAD_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: $("lfName").value.trim(), phone, city: $("lfCity").value.trim(), when: $("lfWhen").value,
+        model: lastCalc ? lastCalc.model : "", calc: lastCalc ? lastCalc.text : "", total: lastCalc ? lastCalc.total : 0,
+        consent: true, website: $("lfWebsite").value, elapsed: Date.now() - openedAt,
+      }),
+    });
     try {
-      const r = await fetch(LEAD_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: $("lfName").value.trim(), phone, city: $("lfCity").value.trim(), when: $("lfWhen").value,
-          model: lastCalc ? lastCalc.model : "", calc: lastCalc ? lastCalc.text : "", total: lastCalc ? lastCalc.total : 0,
-          consent: true, website: $("lfWebsite").value, elapsed: Date.now() - openedAt,
-        }),
-      });
-      const d = await r.json().catch(() => ({}));
+      // Сервер не принимает заявку в первые 3 секунды после открытия страницы (защита от ботов): ждём сами
+      const early = 3200 - (Date.now() - openedAt);
+      if (early > 0) await sleep(early);
+      let r = await send();
+      let d = await r.json().catch(() => ({}));
+      if (r.status === 422 && d.error === "too_fast") { await sleep(3200); r = await send(); d = await r.json().catch(() => ({})); }
       if (r.ok && d.ok) {
         $("leadForm").querySelectorAll("input, select, button").forEach((el) => { el.disabled = true; });
         msg.className = "ok";

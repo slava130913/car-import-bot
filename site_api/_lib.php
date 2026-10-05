@@ -7,6 +7,7 @@ declare(strict_types=1);
 const DATA_GUARD = "<?php exit; ?>\n";
 const RATE_LIMIT_PER_HOUR = 5;
 const MAX_LEADS_PER_REPLY = 100;
+const KEEP_DAYS = 365;  // столько хранятся заявки на хостинге (политика: не дольше 12 месяцев)
 
 function cfg(): array
 {
@@ -88,74 +89,128 @@ function close_locked($fh): void
     fclose($fh);
 }
 
+/** Переписывает файл данных целиком. false, если запись не удалась (например, кончилось место). */
+function write_rows($fh, array $rows): bool
+{
+    $body = DATA_GUARD;
+    foreach ($rows as $r) {
+        $line = json_encode($r, JSON_UNESCAPED_UNICODE);
+        if ($line === false) {
+            return false;
+        }
+        $body .= $line . "\n";
+    }
+    return ftruncate($fh, 0) && rewind($fh) && fwrite($fh, $body) === strlen($body) && fflush($fh);
+}
+
+/** Записи о частоте заявок старше часа больше не нужны: удаляем. Вызывается и при опросе ботом раз в минуту,
+ *  поэтому хеш адреса хранится около часа, даже если новых заявок нет. */
+function rate_rows_fresh(array $rows, int $now): array
+{
+    return array_values(array_filter($rows, function ($r) use ($now) {
+        return is_array($r) && (int)($r['t'] ?? 0) > $now - 3600;
+    }));
+}
+
+function prune_rate(): void
+{
+    $file = data_dir() . '/rate.php';
+    if (!is_file($file)) {
+        return;
+    }
+    [$fh, $rows] = open_locked($file);
+    $fresh = rate_rows_fresh($rows, time());
+    if (count($fresh) !== count($rows)) {
+        write_rows($fh, $fresh);
+    }
+    close_locked($fh);
+}
+
 /** Не больше RATE_LIMIT_PER_HOUR заявок в час с одного адреса. Храним только хеш адреса. */
 function rate_ok(string $ip): bool
 {
     $key = hash('sha256', $ip . '|' . (string)(cfg()['salt'] ?? 'car-leads'));
-    $file = data_dir() . '/rate.php';
-    [$fh, $rows] = open_locked($file);
+    [$fh, $rows] = open_locked(data_dir() . '/rate.php');
     $now = time();
-    $fresh = [];
-    $mine = 0;
-    foreach ($rows as $r) {
-        if (($r['t'] ?? 0) > $now - 3600) {
-            $fresh[] = $r;
-            if (($r['k'] ?? '') === $key) {
-                $mine++;
-            }
-        }
-    }
+    $fresh = rate_rows_fresh($rows, $now);
+    $mine = count(array_filter($fresh, function ($r) use ($key) {
+        return ($r['k'] ?? '') === $key;
+    }));
     $ok = $mine < RATE_LIMIT_PER_HOUR;
     if ($ok) {
         $fresh[] = ['k' => $key, 't' => $now];
     }
-    $body = DATA_GUARD;
-    foreach ($fresh as $r) {
-        $body .= json_encode($r) . "\n";
-    }
-    ftruncate($fh, 0);
-    rewind($fh);
-    fwrite($fh, $body);
+    write_rows($fh, $fresh);
     close_locked($fh);
     return $ok;
 }
 
-/** Дописывает заявку и возвращает её номер (следующий после последнего). */
+/**
+ * Дописывает заявку и возвращает её номер.
+ * Номера выдаёт счётчик в seq.php: он только растёт, удаление строк из leads.php его не уменьшает, поэтому номер
+ * не повторяется. epoch меняется только при создании счётчика заново: по нему бот видит, что нумерация начата сначала.
+ * Блокировка seq.php держится всё время записи и при чтении заявок ботом: номера появляются в файле строго по порядку.
+ */
 function append_lead(array $lead): int
 {
-    $file = data_dir() . '/leads.php';
-    [$fh, $rows] = open_locked($file);
-    $last = 0;
-    foreach ($rows as $r) {
-        $last = max($last, (int)($r['id'] ?? 0));
+    $dir = data_dir();
+    [$sfh, $srows] = open_locked($dir . '/seq.php');
+    [$lfh, $rows] = open_locked($dir . '/leads.php');
+    $seq = $srows[0] ?? null;
+    if (!is_array($seq) || !isset($seq['epoch'], $seq['last'])) {
+        $last = 0;
+        foreach ($rows as $r) {
+            $last = max($last, (int)($r['id'] ?? 0));
+        }
+        $seq = ['epoch' => bin2hex(random_bytes(8)), 'last' => $last];
     }
-    $lead = ['id' => $last + 1] + $lead;
-    fseek($fh, 0, SEEK_END);
-    if (ftell($fh) === 0) {
-        fwrite($fh, DATA_GUARD);
+    $id = (int)$seq['last'] + 1;
+    $seq['last'] = $id;
+    $line = json_encode(['id' => $id] + $lead, JSON_UNESCAPED_UNICODE);
+    // Сначала счётчик: если потом не запишется заявка, номер просто пропадёт, но не повторится
+    if ($line === false || !write_rows($sfh, [$seq])) {
+        json_out(500, ['ok' => false, 'error' => 'storage']);
     }
-    fwrite($fh, json_encode($lead, JSON_UNESCAPED_UNICODE) . "\n");
-    close_locked($fh);
-    return $lead['id'];
+    fseek($lfh, 0, SEEK_END);
+    $size = (int)ftell($lfh);
+    $data = ($size === 0 ? DATA_GUARD : '') . $line . "\n";
+    if (fwrite($lfh, $data) !== strlen($data) || !fflush($lfh)) {
+        ftruncate($lfh, $size);  // не оставляем обрывок строки: к нему приклеилась бы следующая заявка
+        json_out(500, ['ok' => false, 'error' => 'storage']);
+    }
+    close_locked($lfh);
+    close_locked($sfh);
+    return $id;
 }
 
-/** Заявки с номером больше $after (не больше MAX_LEADS_PER_REPLY) и номер последней заявки. */
+/** Заявки с номером больше $after (не больше MAX_LEADS_PER_REPLY), номер последней выданной и epoch счётчика.
+ *  Заодно удаляет заявки старше KEEP_DAYS дней. */
 function leads_after(int $after): array
 {
-    $file = data_dir() . '/leads.php';
-    if (!is_file($file)) {
-        return [[], 0];
+    $dir = data_dir();
+    if (!is_file($dir . '/seq.php') && !is_file($dir . '/leads.php')) {
+        return [[], 0, ''];
     }
-    [$fh, $rows] = open_locked($file);
-    close_locked($fh);
+    [$sfh, $srows] = open_locked($dir . '/seq.php');
+    [$lfh, $rows] = open_locked($dir . '/leads.php');
+    $cutoff = gmdate('Y-m-d\TH:i:s\Z', time() - KEEP_DAYS * 86400);
+    $kept = array_values(array_filter($rows, function ($r) use ($cutoff) {
+        return (string)($r['ts'] ?? '') >= $cutoff;
+    }));
+    if (count($kept) !== count($rows)) {
+        write_rows($lfh, $kept);
+    }
+    close_locked($lfh);
+    close_locked($sfh);
+    $seq = is_array($srows[0] ?? null) ? $srows[0] : [];
     $out = [];
-    $last = 0;
-    foreach ($rows as $r) {
-        $id = (int)($r['id'] ?? 0);
-        $last = max($last, $id);
-        if ($id > $after && count($out) < MAX_LEADS_PER_REPLY) {
+    foreach ($kept as $r) {
+        if ((int)($r['id'] ?? 0) > $after && count($out) < MAX_LEADS_PER_REPLY) {
             $out[] = $r;
         }
     }
-    return [$out, $last];
+    usort($out, function ($a, $b) {
+        return (int)$a['id'] <=> (int)$b['id'];
+    });
+    return [$out, (int)($seq['last'] ?? 0), (string)($seq['epoch'] ?? '')];
 }

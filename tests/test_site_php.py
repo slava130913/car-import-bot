@@ -87,7 +87,8 @@ def test_php_lead_flow(site):
     assert call(f"{url}/api/lead.php", {**LEAD, "consent": False}) == (422, {"ok": False, "error": "consent"})
     # Ловушки для ботов: «принято», но не сохраняется
     assert call(f"{url}/api/lead.php", {**LEAD, "website": "http://spam"}) == (200, {"ok": True, "id": 0})
-    assert call(f"{url}/api/lead.php", {**LEAD, "elapsed": 500}) == (200, {"ok": True, "id": 0})
+    # Слишком быстро после открытия страницы: не «принято», а просьба повторить (страница повторит сама)
+    assert call(f"{url}/api/lead.php", {**LEAD, "elapsed": 500}) == (422, {"ok": False, "error": "too_fast"})
     code, d = call(f"{url}/api/lead.php", {**LEAD, "name": "x" * 500, "when": "bad", "total": -5, "city": "a\x00b"})
     assert code == 200 and d["id"] == 2
 
@@ -97,10 +98,12 @@ def test_php_lead_flow(site):
     tok = {"X-Token": site_token(BOT_TOKEN)}
     code, d = call(f"{url}/api/leads.php?after=0", headers=tok)
     assert code == 200 and d["last"] == 2 and [x["id"] for x in d["leads"]] == [1, 2]
+    epoch = d["epoch"]
+    assert len(epoch) == 16
     first, second = d["leads"]
     assert first["phone"] == "+7 900 111-22-33" and first["when"] == "now" and first["total"] == 2100000
     assert len(second["name"]) == 80 and second["when"] == "" and second["total"] == 0 and "\x00" not in second["city"]
-    assert call(f"{url}/api/leads.php?after=2", headers=tok)[1] == {"ok": True, "leads": [], "last": 2}
+    assert call(f"{url}/api/leads.php?after=2", headers=tok)[1] == {"ok": True, "leads": [], "last": 2, "epoch": epoch}
 
     # Файлы данных не отдаются: защитная строка PHP обрывает вывод, служебные файлы ничего не печатают
     for path in ("api/data/leads.php", "api/data/rate.php", "api/config.php", "api/_lib.php"):
@@ -109,6 +112,26 @@ def test_php_lead_flow(site):
     stored = (base / "api" / "data" / "leads.php").read_text(encoding="utf-8")
     assert stored.startswith("<?php exit; ?>") and "+7 900 111-22-33" in stored
 
-    # Не больше 5 заявок в час с одного адреса (2 уже приняты)
-    codes = [call(f"{url}/api/lead.php", LEAD)[0] for _ in range(4)]
-    assert codes == [200, 200, 200, 429]
+    # Удалили последнюю заявку руками (просьба клиента): номер 2 не выдаётся повторно
+    leads_file = base / "api" / "data" / "leads.php"
+    leads_file.write_text("".join(ln for ln in leads_file.read_text(encoding="utf-8").splitlines(True) if '"id":2,' not in ln),
+                          encoding="utf-8")
+    code, d = call(f"{url}/api/lead.php", LEAD)
+    assert code == 200 and d["id"] == 3
+    code, d = call(f"{url}/api/leads.php?after=2", headers=tok)
+    assert [x["id"] for x in d["leads"]] == [3] and d["last"] == 3 and d["epoch"] == epoch
+
+    # Не больше 5 заявок в час с одного адреса (3 уже приняты)
+    codes = [call(f"{url}/api/lead.php", LEAD)[0] for _ in range(3)]
+    assert codes == [200, 200, 429]
+
+    # Старые записи о частоте удаляются при опросе ботом, даже без новых заявок
+    rate_file = base / "api" / "data" / "rate.php"
+    rate_file.write_text('<?php exit; ?>\n{"k":"old","t":1}\n', encoding="utf-8")
+    call(f"{url}/api/leads.php?after=0", headers=tok)
+    assert '"old"' not in rate_file.read_text(encoding="utf-8")
+
+    # Заявки старше года удаляются с хостинга
+    leads_file.write_text(leads_file.read_text(encoding="utf-8").replace('"id":1,"ts":"20', '"id":1,"ts":"19'), encoding="utf-8")
+    code, d = call(f"{url}/api/leads.php?after=0", headers=tok)
+    assert 1 not in [x["id"] for x in d["leads"]] and '"id":1,' not in leads_file.read_text(encoding="utf-8")
