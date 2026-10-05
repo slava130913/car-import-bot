@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import json
 import logging
 import os
@@ -14,7 +15,7 @@ from datetime import date
 from pathlib import Path
 
 from aiogram import Bot, Dispatcher, F, Router
-from aiogram.filters import Command, CommandObject, CommandStart
+from aiogram.filters import Command, CommandObject, CommandStart, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import (
@@ -33,6 +34,7 @@ from aiogram.types import (
 from calc.engine import AGE_LABELS, FUEL_LABELS, CarInput, age_category_from_date, calculate, format_rub, load_rules, render_text, util_fee
 from calc.rates import get_rates
 
+from .ai import AI, AIError, build_facts
 from .db import DB
 from .texts import EXPLAIN, EXPLAIN_TITLES, GUIDE, GUIDE_TITLES
 
@@ -75,6 +77,8 @@ with open(ROOT / "data" / "models.json", encoding="utf-8") as _f:
     MODELS: list[dict] = json.load(_f)["models"]
 MODELS_BY_ID = {m["id"]: m for m in MODELS}
 db = DB(DB_PATH)
+ai = AI()
+AI_FACTS = build_facts(RULES, GUIDE, EXPLAIN, EXPLAIN_TITLES)
 router = Router()
 
 BTN_CALC = "🧮 Рассчитать под ключ"
@@ -227,7 +231,9 @@ HELP_TEXT = (
     "3. Гид по перегону: шаги, документы, сроки, типичные ошибки.\n\n"
     "4. Проверка по VIN: китайский отчёт (пробег, ДТП, сервисная история) с переводом на русский за 24 часа.\n\n"
     "5. Заявка на подбор: передаём проверенному агенту, он связывается с вами.\n\n"
-    "6. Написать нам: вопрос уходит человеку, ответ придёт сюда же."
+    "6. Написать нам: вопрос уходит человеку, ответ придёт сюда же.\n\n"
+    "Можно просто прислать скриншот объявления из Китая: бот прочитает модель, цену, год и мощность и посчитает под ключ. "
+    "Или задать вопрос своими словами."
 )
 
 
@@ -334,12 +340,37 @@ async def calc_mode_list(c: CallbackQuery, state: FSMContext) -> None:
     )
 
 
+async def _next_step(m: Message, state: FSMContext, prefix: str = "") -> None:
+    """Спрашивает первое недостающее поле расчёта. Порядок: цена, дата выпуска, объём, мощность, тип, маршрут.
+
+    Так одинаково работают ручной ввод, модель из списка и скриншот объявления: заполненное пропускается.
+    """
+    d = await state.get_data()
+    if d.get("price_cny") is None:
+        await state.set_state(Calc.price)
+        await m.answer(prefix + "Цена машины в Китае в юанях, например 95000:", reply_markup=CANCEL_KB)
+    elif not d.get("made"):
+        await state.set_state(Calc.made)
+        await m.answer(prefix + "Год и месяц выпуска, например 2024-03 (можно только год):", reply_markup=CANCEL_KB)
+    elif d.get("engine_cc") is None:
+        await state.set_state(Calc.cc)
+        await m.answer(prefix + "Объём двигателя в см³ (для электромобиля 0):", reply_markup=CANCEL_KB)
+    elif d.get("power_hp") is None:
+        await state.set_state(Calc.hp)
+        await m.answer(prefix + "Мощность в л.с. (для гибрида и электромобиля смотрите подсказку после выбора типа):", reply_markup=CANCEL_KB)
+    elif not d.get("fuel"):
+        await state.set_state(Calc.fuel)
+        await m.answer(prefix + "Тип двигателя:", reply_markup=FUEL_KB)
+    else:
+        await state.set_state(Calc.route)
+        await m.answer(prefix + "Маршрут доставки:", reply_markup=ROUTE_KB)
+
+
 @router.callback_query(F.data == "mode:manual")
 async def calc_mode_manual(c: CallbackQuery, state: FSMContext) -> None:
     await c.answer()
-    await state.update_data(preset=None)
-    await state.set_state(Calc.price)
-    await c.message.answer("Цена машины в Китае в юанях, например 95000:", reply_markup=CANCEL_KB)
+    await state.set_data({"preset": None})
+    await _next_step(c.message, state)
 
 
 @router.callback_query(Calc.model, F.data.startswith("model:"))
@@ -347,17 +378,12 @@ async def calc_model_pick(c: CallbackQuery, state: FSMContext) -> None:
     await c.answer()
     mdl = MODELS_BY_ID.get(c.data.split(":")[1])
     if not mdl:
-        await c.message.answer("Модель не найдена, введите характеристики вручную.", reply_markup=CANCEL_KB)
-        await state.set_state(Calc.price)
+        await state.set_data({"preset": None})
+        await _next_step(c.message, state, "Модель не найдена, введите характеристики вручную.\n\n")
         return
     await state.update_data(preset=mdl["id"], engine_cc=mdl["cc"], power_hp=mdl["hp"], fuel=mdl["fuel"])
-    await state.set_state(Calc.price)
     note = f"\n⚠️ {mdl['note']}." if mdl.get("note") else ""
-    await c.message.answer(
-        f"{mdl['name']}: {mdl['cc']} см³, {mdl['hp']} л.с., {FUEL_LABELS[mdl['fuel']]}.{note}\n\n"
-        "Цена машины в Китае в юанях, например 95000:",
-        reply_markup=CANCEL_KB,
-    )
+    await _next_step(c.message, state, f"{mdl['name']}: {mdl['cc']} см³, {mdl['hp']} л.с., {FUEL_LABELS[mdl['fuel']]}.{note}\n\n")
 
 
 @router.message(Calc.price)
@@ -367,8 +393,14 @@ async def calc_price(m: Message, state: FSMContext) -> None:
         await m.answer("Нужно число в юанях, например 95000.")
         return
     await state.update_data(price_cny=v)
-    await state.set_state(Calc.made)
-    await m.answer("Год и месяц выпуска, например 2024-03 (можно только год):")
+    await _next_step(m, state)
+
+
+def _made_fields(year: int, month: int | None) -> tuple[dict, str]:
+    made = date(year, month or 7, 1)
+    age = age_category_from_date(made)
+    note = "" if month else " (месяц не указан, взял середину года, на границе 3 и 5 лет это важно)"
+    return {"age": age, "made": made.isoformat(), "made_exact": bool(month)}, f"Возраст: {AGE_LABELS[age]}{note}.\n"
 
 
 @router.message(Calc.made)
@@ -379,21 +411,13 @@ async def calc_made(m: Message, state: FSMContext) -> None:
         await m.answer("Формат: 2024-03 или просто 2024.")
         return
     year = int(mt.group(1))
-    month = int(mt.group(2)) if mt.group(2) else 7
-    if not (1990 <= year <= date.today().year) or not (1 <= month <= 12):
+    month = int(mt.group(2)) if mt.group(2) else None
+    if not (1990 <= year <= date.today().year) or not (month is None or 1 <= month <= 12):
         await m.answer("Проверьте год и месяц.")
         return
-    made = date(year, month, 1)
-    age = age_category_from_date(made)
-    note = "" if mt.group(2) else " (месяц не указан, взял середину года, на границе 3 и 5 лет это важно)"
-    await state.update_data(age=age, made=made.isoformat(), made_exact=bool(mt.group(2)))
-    data = await state.get_data()
-    if data.get("preset"):
-        await state.set_state(Calc.route)
-        await m.answer(f"Возраст: {AGE_LABELS[age]}{note}.\nМаршрут доставки:", reply_markup=ROUTE_KB)
-        return
-    await state.set_state(Calc.cc)
-    await m.answer(f"Возраст: {AGE_LABELS[age]}{note}.\nОбъём двигателя в см³ (для электромобиля 0):")
+    fields, prefix = _made_fields(year, month)
+    await state.update_data(**fields)
+    await _next_step(m, state, prefix)
 
 
 @router.message(Calc.cc)
@@ -403,8 +427,7 @@ async def calc_cc(m: Message, state: FSMContext) -> None:
         await m.answer("Нужно число, например 1498. Если указано в литрах, напишите 1.5. Для электромобиля 0.")
         return
     await state.update_data(engine_cc=cc)
-    await state.set_state(Calc.hp)
-    await m.answer("Мощность в л.с. (для гибрида и электромобиля смотрите подсказку после выбора типа):")
+    await _next_step(m, state)
 
 
 @router.message(Calc.hp)
@@ -414,17 +437,87 @@ async def calc_hp(m: Message, state: FSMContext) -> None:
         await m.answer("Нужно число, например 147.")
         return
     await state.update_data(power_hp=int(round(v)))
-    await state.set_state(Calc.fuel)
-    await m.answer("Тип двигателя:", reply_markup=FUEL_KB)
+    await _next_step(m, state)
 
 
 @router.callback_query(Calc.fuel, F.data.startswith("fuel:"))
 async def calc_fuel(c: CallbackQuery, state: FSMContext) -> None:
     await c.answer()
     await state.update_data(fuel=c.data.split(":")[1])
-    await state.set_state(Calc.route)
     await c.message.edit_reply_markup(reply_markup=None)
-    await c.message.answer("Маршрут доставки:", reply_markup=ROUTE_KB)
+    await _next_step(c.message, state)
+
+
+# ---------- скриншот объявления (ИИ) ----------
+
+AI_OFF_TEXT = (
+    "Распознавание скриншотов объявлений скоро включим. "
+    "Пока посчитаем по характеристикам: это займёт минуту."
+)
+
+
+async def _download_image(m: Message, bot: Bot) -> tuple[bytes, str] | None:
+    if m.photo:
+        file_id, media = m.photo[-1].file_id, "image/jpeg"
+    elif m.document and (m.document.mime_type or "").startswith("image/"):
+        file_id, media = m.document.file_id, m.document.mime_type
+    else:
+        return None
+    buf = io.BytesIO()
+    await bot.download(file_id, destination=buf)
+    return buf.getvalue(), media
+
+
+@router.message(StateFilter(None, Calc.mode, Calc.model, Calc.price), F.photo | F.document.mime_type.startswith("image/"))
+async def calc_from_screenshot(m: Message, state: FSMContext, bot: Bot) -> None:
+    db.touch_user(m.from_user.id, m.from_user.username)
+    await state.set_data({"preset": None})
+    if not ai.enabled:
+        await _next_step(m, state, AI_OFF_TEXT + "\n\n")
+        return
+    if not ai.allow(m.from_user.id):
+        await _next_step(m, state, "На сегодня лимит распознаваний исчерпан, посчитаем вручную.\n\n")
+        return
+    await m.answer("Читаю объявление, это займёт до 30 секунд…")
+    try:
+        img = await _download_image(m, bot)
+        if img is None:
+            raise AIError("не изображение")
+        info = await ai.parse_listing(*img)
+    except AIError:
+        await _next_step(m, state, "Не получилось прочитать скриншот. Посчитаем по характеристикам.\n\n")
+        return
+    if not info["is_car_listing"]:
+        await _next_step(m, state, "На картинке не похоже на объявление о машине. Посчитаем по характеристикам.\n\n")
+        return
+    upd: dict = {"preset": None, "ai_model": info["model_name"]}
+    for k in ("price_cny", "engine_cc", "power_hp", "fuel"):
+        if info[k] is not None:
+            upd[k] = info[k]
+    found = []
+    if info["model_name"]:
+        found.append(info["model_name"])
+    if info["price_cny"] is not None:
+        found.append(f"{info['price_cny']:,.0f} ¥".replace(",", " "))
+    age_prefix = ""
+    if info["year"]:
+        fields, age_prefix = _made_fields(info["year"], info["month"])
+        upd.update(fields)
+        found.append(f"{info['year']}" + (f"-{info['month']:02d}" if info["month"] else ""))
+    if info["engine_cc"] is not None:
+        found.append(f"{info['engine_cc']} см³")
+    if info["power_hp"] is not None:
+        found.append(f"{info['power_hp']} л.с.")
+    if info["fuel"]:
+        found.append(FUEL_LABELS[info["fuel"]])
+    if info["mileage_km"]:
+        found.append(f"пробег {info['mileage_km']:,} км".replace(",", " "))
+    await state.set_data(upd)
+    head = "Нашёл в объявлении: " + (", ".join(found) if found else "почти ничего не удалось прочитать") + "."
+    if info["note"]:
+        head += f"\n⚠️ {info['note']}"
+    await m.answer(head + "\nЕсли что-то неверно, нажмите «Ввести вручную».", reply_markup=_ikb([[("✍️ Ввести вручную", "mode:manual")]]))
+    await _next_step(m, state, age_prefix)
 
 
 @router.callback_query(Calc.route, F.data.startswith("route:"))
@@ -480,6 +573,8 @@ async def calc_dest(c: CallbackQuery, state: FSMContext, bot: Bot) -> None:
     head = ""
     if data.get("preset") and data["preset"] in MODELS_BY_ID:
         head = f"{MODELS_BY_ID[data['preset']]['name']}\n"
+    elif data.get("ai_model"):
+        head = f"{data['ai_model']} (по скриншоту)\n"
     text = head + render_text(res, car) + _three_year_advice(data, car, res.total_mid)
     text += f"\n\nКурс: {rates_src}.\n{RULES['disclaimer']}"
     await c.message.answer(text, reply_markup=MAIN_KB)
@@ -920,6 +1015,25 @@ async def admin_broadcast_confirm(c: CallbackQuery, state: FSMContext, bot: Bot)
     await c.message.answer(f"Разослано: {sent}, не доставлено: {failed}.")
 
 
+@router.message(StateFilter(None), F.text)
+async def free_question(m: Message) -> None:
+    """Вопрос своими словами: отвечает ИИ по нашим ставкам и гиду, а если ИИ выключен, подсказываем меню."""
+    text = (m.text or "").strip()
+    if text.startswith("/") or len(text) < 6 or not ai.enabled:
+        await m.answer("Выберите действие на клавиатуре или отправьте /start. Вопрос человеку можно задать через «Написать нам».", reply_markup=MAIN_KB)
+        return
+    db.touch_user(m.from_user.id, m.from_user.username)
+    if not ai.allow(m.from_user.id):
+        await m.answer("На сегодня лимит вопросов исчерпан. Задайте вопрос человеку через «Написать нам».", reply_markup=MAIN_KB)
+        return
+    try:
+        reply = await ai.answer(text, AI_FACTS)
+    except AIError:
+        await m.answer("Не получилось ответить. Задайте вопрос человеку через «Написать нам».", reply_markup=MAIN_KB)
+        return
+    await m.answer(reply + "\n\nОтвет сформирован автоматически по правилам бота. Точный расчёт: «Рассчитать под ключ».", reply_markup=MAIN_KB)
+
+
 @router.message()
 async def fallback(m: Message) -> None:
     await m.answer("Выберите действие на клавиатуре или отправьте /start.", reply_markup=MAIN_KB)
@@ -946,7 +1060,7 @@ async def main() -> None:
     bot = Bot(BOT_TOKEN)
     dp = Dispatcher()
     dp.include_router(router)
-    log.info("rules version %s, models %d, admins %s, vin price %s stars", RULES["version"], len(MODELS), sorted(ADMIN_IDS), VIN_PRICE_STARS)
+    log.info("rules version %s, models %d, admins %s, vin price %s stars, ai %s (%s)", RULES["version"], len(MODELS), sorted(ADMIN_IDS), VIN_PRICE_STARS, "on" if ai.enabled else "off", ai.model)
     await bot.delete_webhook(drop_pending_updates=True)
     try:
         await bot.set_my_commands(COMMANDS)
