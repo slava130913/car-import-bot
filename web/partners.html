@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Партнёрам: заявки на авто из Китая</title>
+<meta name="description" content="Для тех, кто возит машины из Китая: заявки на подбор за долю со сделки или свой Telegram-бот с калькулятором под вашим брендом.">
+<meta property="og:title" content="Заявки на авто из Китая за долю со сделки">
+<meta property="og:description" content="Telegram-бот считает машину под ключ и передаёт заявки партнёрам. Или такой же бот под вашим брендом.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=Unbounded:wght@600;800&display=swap">
+<style>
+  :root {
+    --bg: #faf7f6; --surface: #ffffff; --ink: #1d1517; --muted: #6b5d60; --line: #e9dfdf;
+    --red: #b8121f; --red-deep: #7a0812; --gold: #f6c33a; --gold-ink: #3a2a00;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { color-scheme: dark; --bg: #151012; --surface: #1f181a; --ink: #f4ecec; --muted: #b4a5a8; --line: #3a2e31; --red: #ff5a63; --red-deep: #3a0f13; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.6 "Golos Text", system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .hero { background: linear-gradient(160deg, #c8141f, #6e0610); color: #fff; padding-block: 48px 40px; padding-inline: 16px; }
+  .in { max-width: 920px; margin: 0 auto; }
+  .hero .in { display: grid; grid-template-columns: 1fr auto; gap: 28px; align-items: center; }
+  .hero img { width: 140px; height: 140px; border-radius: 50%; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+  @media (max-width: 680px) { .hero .in { grid-template-columns: 1fr; } .hero img { width: 96px; height: 96px; order: -1; } }
+  h1, h2 { font-family: "Unbounded", "Golos Text", system-ui, sans-serif; letter-spacing: -0.01em; text-wrap: balance; }
+  h1 { font-size: clamp(28px, 5.4vw, 44px); line-height: 1.12; margin: 0 0 14px; font-weight: 800; }
+  .hero p { margin: 0 0 22px; font-size: 19px; max-width: 56ch; color: #ffe9ea; }
+  .cta { display: inline-block; background: var(--gold); color: var(--gold-ink); font-weight: 700; padding: 14px 22px; border-radius: 12px; text-decoration: none; font-size: 17px; }
+  .cta.ghost { background: transparent; color: #fff; border: 1px solid rgba(255,255,255,.6); margin-left: 8px; }
+  .cta:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+  main { padding-inline: 16px; }
+  section { padding-block: 40px 8px; }
+  h2 { font-size: 24px; margin: 0 0 16px; font-weight: 600; }
+  p { max-width: 66ch; margin: 0 0 12px; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 680px) { .two { grid-template-columns: 1fr; } }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 20px; display: flex; flex-direction: column; gap: 8px; }
+  .card.main { border: 2px solid var(--red); }
+  .card h3 { margin: 0; font-size: 19px; }
+  .card .price { font-family: "Unbounded", system-ui, sans-serif; font-size: 20px; font-weight: 600; color: var(--red); }
+  .card ul { margin: 4px 0 0; padding-left: 20px; }
+  ol.how { padding-left: 22px; max-width: 66ch; }
+  ol.how li { margin-bottom: 10px; }
+  .feat { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  @media (max-width: 760px) { .feat { grid-template-columns: 1fr; } }
+  .feat div { border-top: 3px solid var(--gold); padding-top: 10px; }
+  .feat b { display: block; margin-bottom: 4px; }
+  details { border-bottom: 1px solid var(--line); padding-block: 12px; max-width: 70ch; }
+  summary { cursor: pointer; font-weight: 600; }
+  .final { text-align: center; padding-block: 48px 64px; }
+  .final .cta { font-size: 18px; }
+  .final .cta.ghost { color: var(--red); border-color: var(--red); }
+  footer { color: var(--muted); font-size: 14px; text-align: center; padding-block: 0 32px; padding-inline: 16px; }
+  a { color: var(--red); }
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="in">
+    <div>
+      <h1>Заявки на машины из Китая за долю со сделки</h1>
+      <p>Наш Telegram-бот считает стоимость машины из Китая под ключ и собирает заявки на подбор. Ищем партнёров, которые возят машины, и передаём им клиентов. Без абонентки и предоплаты.</p>
+      <a class="cta" id="ctaTop" href="#">Стать партнёром</a><a class="cta ghost" id="demoTop" href="#" target="_blank" rel="noopener">Открыть бота</a>
+    </div>
+    <img src="avatar.png" alt="Логотип бота: белый автомобиль на красном фоне">
+  </div>
+</header>
+<main class="in">
+  <section>
+    <h2>Два формата</h2>
+    <div class="two">
+      <div class="card main">
+        <h3>Заявки за долю</h3>
+        <div class="price">10–20% от вашей комиссии</div>
+        <p>Получаете заявки с моделью, бюджетом, городом и контактом. Платите только с закрытой сделки.</p>
+        <ul><li>Без абонентки и предоплаты</li><li>Заявка уходит одному партнёру</li><li>Работаем с 2–3 партнёрами, чтобы заявок хватало всем</li></ul>
+      </div>
+      <div class="card">
+        <h3>Свой бот под вашим брендом</h3>
+        <div class="price">от 15 000 ₽ + 3 000 ₽/мес</div>
+        <p>Такой же бот с вашим названием, логотипом и контактом. Все заявки только вам.</p>
+        <ul><li>Запуск за один день</li><li>Ставки обновляем при изменении законов</li><li>Первая неделя бесплатно</li></ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Что умеет бот</h2>
+    <div class="feat">
+      <div><b>Расчёт под ключ</b>Пошлина по единым ставкам, утильсбор с порогом 160 л.с., логистика по четырём маршрутам, СБКТС, ЭПТС, доставка до города. Курс ЦБ онлайн.</div>
+      <div><b>24 популярные модели</b>Клиент выбирает модель и вводит только цену и год. Сравнение маршрутов одной кнопкой.</div>
+      <div><b>Подсказки, которые продают</b>Бот сам предупреждает про порог 160 л.с. и считает экономию, если машине скоро исполнится 3 года.</div>
+      <div><b>Проверка льготы</b>Три вопроса и ответ, попадает ли машина под льготный утильсбор.</div>
+      <div><b>Гид по перегону</b>Шаги, документы, сроки и ошибки. Меньше одинаковых вопросов менеджеру.</div>
+      <div><b>Заявки сразу в Telegram</b>Менеджер видит заявку через секунду, отвечает клиенту прямо из бота, выгружает всё в Excel.</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Как это работает</h2>
+    <ol class="how">
+      <li>Вы пишете нам через бота: компания, город, сколько машин в месяц возите.</li>
+      <li>Созваниваемся на 10 минут, договариваемся о регионах и доле.</li>
+      <li>Заявки из вашего региона уходят вам в Telegram с контактом клиента.</li>
+      <li>Раз в месяц сверяем закрытые сделки.</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Вопросы</h2>
+    <details><summary>Откуда берутся заявки?</summary><p>Из нашего бота и сайта-калькулятора. Трафик идёт из тематических каналов, чатов и роликов о машинах из Китая.</p></details>
+    <details><summary>Насколько точен расчёт?</summary><p>Ставки собраны из открытых источников и обновляются при изменении правил. Расчёт ориентировочный, бот показывает вилку «от и до» и честно пишет, если ставка для редкой комбинации объёма и мощности не подтверждена.</p></details>
+    <details><summary>Можно поставить свои цены на логистику и услуги?</summary><p>Да, в формате «Свой бот». Клиент увидит вашу реальную цену под ключ.</p></details>
+    <details><summary>Что, если сделка не закрылась?</summary><p>Ничего. В формате заявок за долю вы платите только с закрытых сделок.</p></details>
+  </section>
+
+  <section class="final">
+    <h2>Начнём?</h2>
+    <p style="margin-inline:auto">Напишите в бота, ответим в течение дня.</p>
+    <a class="cta" id="ctaBottom" href="#">Стать партнёром</a><a class="cta ghost" id="demoBottom" href="#" target="_blank" rel="noopener">Попробовать бота</a>
+  </section>
+</main>
+<footer>Калькулятор для клиентов: <a href="./">открыть</a>.</footer>
+<script src="config.js"></script>
+<script>
+  (function () {
+    var bot = (window.APP_CONFIG && window.APP_CONFIG.botUsername) || "china_car_calc_bot";
+    ["ctaTop", "ctaBottom"].forEach(function (id) { var a = document.getElementById(id); a.href = "https://t.me/" + bot + "?start=partner"; a.target = "_blank"; a.rel = "noopener"; });
+    ["demoTop", "demoBottom"].forEach(function (id) { document.getElementById(id).href = "https://t.me/" + bot; });
+  })();
+</script>
+</body>
+</html>

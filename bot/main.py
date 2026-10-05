@@ -246,6 +246,16 @@ async def cmd_start(m: Message, state: FSMContext, command: CommandObject) -> No
     if command.args == "calc":
         await calc_start(m, state)
         return
+    if command.args == "partner":
+        await state.set_state(Support.msg)
+        await state.update_data(kind="partner")
+        await m.answer(
+            "Партнёрство: заявки из бота за долю со сделки или свой бот под вашим брендом.\n\n"
+            "Напишите одним сообщением: компания, город, сколько машин в месяц возите и как с вами связаться. "
+            "Ответим в течение дня.",
+            reply_markup=CANCEL_KB,
+        )
+        return
     text = (
         (f"Привет! Это бот {BRAND_NAME}. Я помогаю посчитать" if BRAND_NAME else "Привет! Я помогаю посчитать")
         + ", сколько реально стоит пригнать машину из Китая, "
@@ -746,11 +756,13 @@ async def support_start(m: Message, state: FSMContext) -> None:
 
 @router.message(Support.msg)
 async def support_message(m: Message, state: FSMContext, bot: Bot) -> None:
+    kind = (await state.get_data()).get("kind")
     await state.clear()
+    title = "🤝 Заявка на партнёрство" if kind == "partner" else "✍️ Вопрос"
     delivered = 0
     for admin in ADMIN_IDS:
         try:
-            await bot.send_message(admin, f"✍️ Вопрос от @{m.from_user.username or '-'} (id {m.from_user.id}). Ответьте реплаем на следующее сообщение.")
+            await bot.send_message(admin, f"{title} от @{m.from_user.username or '-'} (id {m.from_user.id}). Ответьте реплаем на следующее сообщение.")
             fwd = await bot.forward_message(admin, m.chat.id, m.message_id)
             db.add_support(admin, fwd.message_id, m.from_user.id)
             delivered += 1

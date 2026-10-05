@@ -324,3 +324,18 @@ def test_branding_in_start_help_and_support(env, monkeypatch):
     out = run(flow())
     assert "Это бот АвтоМост" in out
     assert out.count("@automost_manager") == 2
+
+
+def test_partner_deep_link_marks_admin_message(env):
+    state, fbot = env
+
+    async def flow():
+        m = Msg(text="/start partner")
+        await bm.cmd_start(m, state, CommandObject(prefix="/", command="start", args="partner"))
+        assert await state.get_state() == bm.Support.msg.state
+        await bm.support_message(Msg(text="ООО Ромашка, Тула, 5 машин в месяц", message_id=901, outbox=m.outbox), state, fbot)
+        return m
+
+    m = run(flow())
+    assert "Партнёрство" in texts(m)
+    assert any("Заявка на партнёрство" in t for _, t in fbot.sent)
