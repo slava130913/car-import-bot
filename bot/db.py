@@ -65,7 +65,8 @@ def _now() -> str:
 class DB:
     def __init__(self, path: str | Path):
         self.path = str(path)
-        self.conn = sqlite3.connect(self.path)
+        # check_same_thread=False: aiogram может вызвать код из пула потоков; запись идёт по одному соединению последовательно
+        self.conn = sqlite3.connect(self.path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(SCHEMA)
 

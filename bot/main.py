@@ -66,6 +66,9 @@ PAYMENT_INSTRUCTIONS = fix_mojibake(os.environ.get(
 ))
 DB_PATH = os.environ.get("DB_PATH", str(ROOT / "data" / "bot.sqlite3"))
 WEB_URL = os.environ.get("WEB_URL", "")
+# Брендирование под клиента (white label): название компании и прямой контакт менеджера
+BRAND_NAME = fix_mojibake(os.environ.get("BRAND_NAME", "").strip())
+MANAGER_CONTACT = fix_mojibake(os.environ.get("MANAGER_CONTACT", "").strip())
 
 RULES = load_rules()
 with open(ROOT / "data" / "models.json", encoding="utf-8") as _f:
@@ -244,7 +247,8 @@ async def cmd_start(m: Message, state: FSMContext, command: CommandObject) -> No
         await calc_start(m, state)
         return
     text = (
-        "Привет! Я помогаю посчитать, сколько реально стоит пригнать машину из Китая, "
+        (f"Привет! Это бот {BRAND_NAME}. Я помогаю посчитать" if BRAND_NAME else "Привет! Я помогаю посчитать")
+        + ", сколько реально стоит пригнать машину из Китая, "
         "проверить, пройдёт ли она по льготному утильсбору, и проверить её историю по VIN.\n\n"
         f"Правила расчёта актуальны на {RULES['version']}.\n"
         "Выберите действие:"
@@ -266,7 +270,8 @@ async def cmd_cancel(m: Message, state: FSMContext) -> None:
 async def cmd_help(m: Message) -> None:
     pref = RULES["util"]["preferential"]
     await m.answer(
-        HELP_TEXT + "\n\nЛьготный утильсбор для физлица действует, если:\n• " + "\n• ".join(pref["conditions"]) +
+        HELP_TEXT + (f"\n\nМенеджер: {MANAGER_CONTACT}" if MANAGER_CONTACT else "") +
+        "\n\nЛьготный утильсбор для физлица действует, если:\n• " + "\n• ".join(pref["conditions"]) +
         f"\n\n{RULES['disclaimer']}",
         reply_markup=MAIN_KB,
     )
@@ -735,7 +740,8 @@ async def support_start(m: Message, state: FSMContext) -> None:
     db.touch_user(m.from_user.id, m.from_user.username)
     await state.clear()
     await state.set_state(Support.msg)
-    await m.answer("Напишите вопрос одним сообщением, можно с фото. Ответ придёт сюда же.", reply_markup=CANCEL_KB)
+    direct = f"\nИли напишите менеджеру напрямую: {MANAGER_CONTACT}" if MANAGER_CONTACT else ""
+    await m.answer(f"Напишите вопрос одним сообщением, можно с фото. Ответ придёт сюда же.{direct}", reply_markup=CANCEL_KB)
 
 
 @router.message(Support.msg)
@@ -756,7 +762,8 @@ async def support_message(m: Message, state: FSMContext, bot: Bot) -> None:
         await m.answer("Не удалось передать сообщение, попробуйте позже.", reply_markup=MAIN_KB)
 
 
-def _is_support_reply(m: Message) -> bool:
+async def _is_support_reply(m: Message) -> bool:
+    # async: синхронные фильтры aiogram выполняет в отдельном потоке, а соединение SQLite привязано к основному
     return (
         _is_admin(m)
         and m.reply_to_message is not None

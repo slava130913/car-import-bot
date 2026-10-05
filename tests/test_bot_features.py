@@ -203,10 +203,10 @@ def test_support_bridge_both_directions(env):
         assert fbot.forwarded == [(ADMIN_ID, 1, 777)]
         fwd_id = fbot._next_id
         reply = Msg(text="Около месяца", from_user=User(id=ADMIN_ID), chat=Chat(id=ADMIN_ID), reply_to_message=Fwd(fwd_id))
-        assert bm._is_support_reply(reply)
+        assert await bm._is_support_reply(reply)
         await bm.support_reply(reply, fbot)
         stranger = Msg(text="x", from_user=User(id=9), reply_to_message=Fwd(fwd_id))
-        assert not bm._is_support_reply(stranger)
+        assert not await bm._is_support_reply(stranger)
         return m, reply
 
     m, reply = run(flow())
@@ -282,3 +282,45 @@ def test_fix_mojibake_repairs_cp1251_garbled_utf8_and_keeps_normal_text():
     assert bm.fix_mojibake(good) == good
     assert bm.fix_mojibake("Pay via SBP") == "Pay via SBP"
     assert bm.fix_mojibake("") == ""
+
+
+def test_custom_filters_are_async_so_aiogram_does_not_run_them_in_threads():
+    """aiogram выполняет синхронные фильтры через asyncio.to_thread; с SQLite это падало на сервере."""
+    import inspect
+
+    from aiogram.dispatcher.event.handler import FilterObject
+
+    for observer in (bm.router.message, bm.router.callback_query):
+        for handler in observer.handlers:
+            for flt in handler.filters or []:
+                cb = flt.callback if isinstance(flt, FilterObject) else flt
+                if inspect.isfunction(cb):
+                    assert inspect.iscoroutinefunction(cb), f"синхронный фильтр {cb.__name__} уйдёт в поток"
+
+
+def test_db_usable_from_another_thread(tmp_path):
+    import threading
+
+    db = DB(tmp_path / "x.sqlite3")
+    db.add_support(1, 2, 3)
+    out = {}
+    t = threading.Thread(target=lambda: out.setdefault("u", db.support_user(1, 2)))
+    t.start(); t.join()
+    assert out["u"] == 3
+
+
+def test_branding_in_start_help_and_support(env, monkeypatch):
+    state, fbot = env
+    monkeypatch.setattr(bm, "BRAND_NAME", "АвтоМост")
+    monkeypatch.setattr(bm, "MANAGER_CONTACT", "@automost_manager")
+
+    async def flow():
+        m = Msg(text="/start")
+        await bm.cmd_start(m, state, CommandObject(prefix="/", command="start", args=None))
+        await bm.cmd_help(m)
+        await bm.support_start(m, state)
+        return texts(m)
+
+    out = run(flow())
+    assert "Это бот АвтоМост" in out
+    assert out.count("@automost_manager") == 2
